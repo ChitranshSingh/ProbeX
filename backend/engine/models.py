@@ -58,6 +58,66 @@ PROFILES: dict[str, ScanProfile] = {
 
 
 # ---------------------------------------------------------------------------
+# Baseline (used by confidence scorer — produced by HttpClient.record_baseline)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Baseline:
+    """
+    One clean, unmodified HTTP response recorded before fuzzing begins.
+
+    The confidence scorer compares fuzzed responses against this baseline to
+    distinguish deliberate changes (caused by a payload) from server noise.
+    """
+
+    status: int
+    """HTTP status code of the baseline response."""
+
+    text: str
+    """Full response body text of the baseline response."""
+
+    elapsed_ms: float
+    """Round-trip time in milliseconds for the baseline request."""
+
+
+# ---------------------------------------------------------------------------
+# FormField
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FormField:
+    """
+    A single input discovered inside an HTML ``<form>``.
+
+    Extracted by the crawler's form parser and stored on ``Endpoint`` so the
+    fuzzer knows exactly which parameters to target and with what type hints.
+    """
+
+    name: str
+    """``name`` attribute of the input element."""
+
+    input_type: str
+    """
+    Normalised semantic type used by the fuzzer for payload selection.
+
+    Values:
+    - ``"id_field"``      – name contains 'id' or 'uid'.
+    - ``"search_field"``  – name contains 'q', 'query', or 'search'.
+    - ``"url_field"``     – name contains 'url', 'redirect', or 'next'.
+    - ``"email_field"``   – HTML type attribute is 'email'.
+    - ``"generic_text"``  – everything else.
+    """
+
+    html_type: str = "text"
+    """Raw ``type`` attribute of the ``<input>`` element (e.g. 'text', 'email', 'hidden')."""
+
+    default_value: str = ""
+    """Default / placeholder value to use when fuzzing this field."""
+
+
+# ---------------------------------------------------------------------------
 # Endpoint
 # ---------------------------------------------------------------------------
 
@@ -73,10 +133,30 @@ class Endpoint:
     """HTTP method (GET, POST, PUT, DELETE, …)."""
 
     params: list[str] = field(default_factory=list)
-    """Query-string or form parameter names discovered at this endpoint."""
+    """Query-string parameter names present in the URL."""
 
     headers: dict[str, str] = field(default_factory=dict)
     """Additional headers observed or required for this endpoint."""
+
+    form_fields: list[FormField] = field(default_factory=list)
+    """
+    Form inputs discovered at this endpoint.
+
+    Populated when the crawler encounters an HTML ``<form>`` whose ``action``
+    resolves to this endpoint's URL.  Empty for plain link endpoints.
+    """
+
+    input_types: list[str] = field(default_factory=list)
+    """
+    De-duplicated list of ``FormField.input_type`` values for quick filtering.
+
+    Example: ``["id_field", "search_field", "generic_text"]``.
+    The fuzzer uses this to decide which payload sets to apply without
+    iterating over ``form_fields`` repeatedly.
+    """
+
+    depth: int = 0
+    """BFS depth at which this endpoint was first discovered (0 = seed URL)."""
 
 
 # ---------------------------------------------------------------------------
