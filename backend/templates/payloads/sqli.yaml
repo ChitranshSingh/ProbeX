@@ -1,0 +1,21 @@
+template_id: sqli-error-based
+title: SQL Injection (Error-Based)
+severity: critical
+cwe: CWE-89
+owasp: "A03:2021 – Injection"
+cvss_score: 9.8
+remediation: >
+  Use parameterised queries or prepared statements for all database interactions.
+  Never concatenate user-controlled input directly into SQL strings. Apply the
+  principle of least privilege — the application's database account should not
+  have DROP / ALTER permissions.
+payloads:
+  - "'"
+  - "'--"
+  - "' OR '1'='1"
+  - "'; SELECT sleep(5)--"
+  - "1 AND 1=CONVERT(int,(SELECT TOP 1 name FROM sysobjects))--"
+detection:
+  type: error_pattern
+  reflect_payload: false
+  pattern: "SQL syntax|mysql_fetch|ORA-[0-9]+|pg_query|sqlite3.OperationalError|Unclosed quotation"

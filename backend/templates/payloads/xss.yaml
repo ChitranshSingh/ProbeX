@@ -1,0 +1,21 @@
+template_id: xss-reflected
+title: Reflected Cross-Site Scripting
+severity: high
+cwe: CWE-79
+owasp: "A03:2021 – Injection"
+cvss_score: 7.2
+remediation: >
+  Encode all user-supplied data before inserting it into HTML contexts.
+  Use a context-aware output-encoding library (e.g. DOMPurify for client-side,
+  html.escape() or Jinja2 autoescape for server-side templates). Add a strict
+  Content-Security-Policy header that disallows inline scripts.
+payloads:
+  - '<script>alert(1)</script>'
+  - '"><svg onload=alert(1)>'
+  - "';alert(String.fromCharCode(88,83,83))//"
+  - '<img src=x onerror=alert(document.domain)>'
+  - '"><details open ontoggle=alert(1)>'
+detection:
+  type: reflection
+  reflect_payload: true
+  pattern: null
