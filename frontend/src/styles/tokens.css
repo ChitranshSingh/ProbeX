@@ -1,0 +1,54 @@
+/*
+ * ProbeX – design tokens
+ *
+ * These CSS custom properties are the single source of truth for the colour
+ * palette.  They are intentionally kept in sync with the design-token
+ * constants in backend/engine/reporter.py (_BG_DEEP, _ACCENT, …) so that
+ * the live dashboard and the exported self-contained HTML report look
+ * identical.
+ *
+ * Usage:
+ *   color: var(--text-primary);
+ *   background: var(--bg-card);
+ */
+
+:root {
+  /* ── Backgrounds ─────────────────────────────────────── */
+  --bg-deep:    #0a0e1a;   /* page background (deepest)        */
+  --bg-card:    #111827;   /* card / panel surface             */
+  --bg-hover:   #1e293b;   /* hover state for interactive rows */
+
+  /* ── Borders ─────────────────────────────────────────── */
+  --border:     #1e3a5f;   /* subtle border / divider line     */
+
+  /* ── Accent / Brand ──────────────────────────────────── */
+  --accent:     #00d4ff;   /* primary accent (cyan)            */
+  --accent-2:   #00f5c4;   /* secondary accent (teal-green)    */
+
+  /* ── Semantic status ─────────────────────────────────── */
+  --success:    #10b981;   /* positive / ok                    */
+  --warning:    #f59e0b;   /* caution / medium severity        */
+  --danger:     #ef4444;   /* high severity                    */
+  --critical:   #dc2626;   /* critical severity (deepest red)  */
+
+  /* ── Typography ──────────────────────────────────────── */
+  --text-primary: #f1f5f9; /* body copy                        */
+  --text-muted:   #94a3b8; /* secondary / label text           */
+
+  /* ── Severity tokens (mapped to above) ──────────────── */
+  --sev-critical: #dc2626;
+  --sev-high:     #f97316;
+  --sev-medium:   #f59e0b;
+  --sev-low:      #4ade80;
+  --sev-info:     #60a5fa;
+
+  /* ── Radii ───────────────────────────────────────────── */
+  --radius-sm:  4px;
+  --radius-md:  8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* ── Shadows / glows ─────────────────────────────────── */
+  --glow-accent: 0 0 32px rgba(0, 212, 255, 0.12);
+  --glow-card:   0 4px 24px rgba(0, 0, 0, 0.4);
+}

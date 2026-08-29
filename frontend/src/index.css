@@ -1,0 +1,76 @@
+/* ProbeX – global stylesheet */
+@import './styles/tokens.css';
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base reset ─────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar           { width: 6px; height: 6px; }
+::-webkit-scrollbar-track     { background: var(--bg-card); }
+::-webkit-scrollbar-thumb     { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ── Focus ring ─────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Selection ──────────────────────────────────────────────────────────── */
+::selection {
+  background: rgba(0, 212, 255, 0.2);
+  color: var(--text-primary);
+}
+
+/* ── Typography helpers ─────────────────────────────────────────────────── */
+.text-gradient {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Card base ──────────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glow-card);
+}
+
+/* ── Severity badge colours ─────────────────────────────────────────────── */
+.badge-critical { background: rgba(220, 38, 38, 0.15); color: #fca5a5; border-color: rgba(220,38,38,0.4); }
+.badge-high     { background: rgba(249, 115, 22, 0.15); color: #fdba74; border-color: rgba(249,115,22,0.4); }
+.badge-medium   { background: rgba(245, 158, 11, 0.15); color: #fcd34d; border-color: rgba(245,158,11,0.4); }
+.badge-low      { background: rgba(74, 222, 128, 0.15); color: #86efac; border-color: rgba(74,222,128,0.4); }
+.badge-info     { background: rgba(96, 165, 250, 0.15); color: #93c5fd; border-color: rgba(96,165,250,0.4); }
