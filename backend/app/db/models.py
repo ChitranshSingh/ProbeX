@@ -4,6 +4,11 @@ ProbeX – SQLModel table definitions.
 One table per domain concept.  SQLModel lets us use the same class as both
 a Pydantic model (for validation) and a SQLAlchemy ORM model (for DB I/O),
 keeping the two layers in sync automatically.
+
+Classes
+-------
+ScanRow        – persisted record for a single DAST scan run.
+FindingRow     – persisted record for a single security finding.
 """
 
 from __future__ import annotations
@@ -12,14 +17,19 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlmodel import JSON, Column, Field, SQLModel
+from sqlmodel import Field, SQLModel
 
 
 def _new_uuid() -> str:
     return str(uuid.uuid4())
 
 
-class Scan(SQLModel, table=True):
+# ---------------------------------------------------------------------------
+# ScanRow
+# ---------------------------------------------------------------------------
+
+
+class ScanRow(SQLModel, table=True):
     """Persisted record for a single DAST scan run."""
 
     __tablename__ = "scans"
@@ -45,6 +55,14 @@ class Scan(SQLModel, table=True):
         description="Current lifecycle state (matches ScanStatus literal).",
     )
 
+    consent_confirmed: bool = Field(
+        default=False,
+        description=(
+            "Mirrors ScanRequest.consent_confirmed.  Stored for audit purposes "
+            "so there is a durable record that the caller confirmed authorisation."
+        ),
+    )
+
     started_at: datetime = Field(
         default_factory=datetime.utcnow,
         description="UTC timestamp when the scan was created / queued.",
@@ -65,13 +83,27 @@ class Scan(SQLModel, table=True):
         description="Composite risk score [0, 100].",
     )
 
+    stats_json: Optional[str] = Field(
+        default=None,
+        description=(
+            "JSON-encoded dict of miscellaneous scan statistics "
+            "(e.g. requests made, payloads sent, duration_s). "
+            "Stored as text so the schema can evolve without migrations."
+        ),
+    )
+
     is_example: bool = Field(
         default=False,
         description="True for scans seeded by seed/seed_example_scan.py.",
     )
 
 
-class FindingRecord(SQLModel, table=True):
+# ---------------------------------------------------------------------------
+# FindingRow
+# ---------------------------------------------------------------------------
+
+
+class FindingRow(SQLModel, table=True):
     """Persisted record for a single security finding."""
 
     __tablename__ = "findings"
@@ -86,7 +118,7 @@ class FindingRecord(SQLModel, table=True):
         ...,
         foreign_key="scans.id",
         index=True,
-        description="FK → Scan.id.",
+        description="FK → ScanRow.id.",
     )
 
     template_id: str = Field(
@@ -158,3 +190,11 @@ class FindingRecord(SQLModel, table=True):
         default=False,
         description="True for findings injected by the seed script.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Backwards-compat aliases (old code used Scan / FindingRecord)
+# ---------------------------------------------------------------------------
+
+Scan = ScanRow
+FindingRecord = FindingRow

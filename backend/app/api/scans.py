@@ -3,58 +3,69 @@ ProbeX – scan REST endpoints.
 
 Routes
 ------
-POST /api/scans        – create and enqueue a new scan.
-GET  /api/scans        – list all scans (summary view).
-GET  /api/scans/{id}   – fetch a single scan with full findings.
+POST /api/scans                         – validate consent, create scan, start pipeline.
+GET  /api/scans                         – list all scans, newest first.
+GET  /api/scans/{scan_id}               – full ScanSummary with findings.
+GET  /api/scans/{scan_id}/report        – download JSON or self-contained HTML report.
 
-Background tasks run the engine pipeline asynchronously so the POST handler
-returns immediately with HTTP 202 Accepted.
+Design decisions
+----------------
+- Consent check returns HTTP 400 (Bad Request), not 422.  422 is the FastAPI
+  default for schema-validation errors; a deliberate logical rejection like
+  "you didn't tick the consent box" is semantically a 400.
+- The POST handler calls ``start_scan_task()`` instead of adding to
+  ``BackgroundTasks`` — the task needs to run in the main event loop so it can
+  use ``asyncio.Queue`` for WS broadcast.
+- The report endpoint streams the HTML as a ``StreamingResponse`` so very large
+  reports don't buffer in memory.
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlmodel import Session
 
-from app.core.runner import run_scan
+from app.core.runner import start_scan_task
 from app.db import crud
 from app.db.session import get_session
-from app.schemas import ScanRequest, ScanSummary
+from app.schemas import Finding, ScanRequest, ScanSummary
 
 router = APIRouter(tags=["scans"])
 
 
 # ---------------------------------------------------------------------------
-# Placeholder helper — builds a ScanSummary from DB rows
+# Internal helpers
 # ---------------------------------------------------------------------------
 
 
-def _build_summary(scan, findings) -> ScanSummary:  # type: ignore[no-untyped-def]
-    """Assemble a ScanSummary from ORM objects (used by GET endpoints)."""
-    from app.schemas import Finding
+def _row_to_finding(f) -> Finding:  # type: ignore[no-untyped-def]
+    """Convert a ``FindingRow`` ORM object to a ``Finding`` Pydantic schema."""
+    return Finding(
+        id=f.id,
+        template_id=f.template_id,
+        title=f.title,
+        severity=f.severity,  # type: ignore[arg-type]
+        url=f.url,
+        parameter=f.parameter,
+        payload=f.payload,
+        evidence=f.evidence,
+        cwe=f.cwe,
+        owasp=f.owasp,
+        cvss_score=f.cvss_score,
+        confidence=f.confidence,
+        remediation=f.remediation,
+        ai_remediation=f.ai_remediation,
+        is_example=f.is_example,
+    )
 
-    finding_objs = [
-        Finding(
-            id=f.id,
-            template_id=f.template_id,
-            title=f.title,
-            severity=f.severity,
-            url=f.url,
-            parameter=f.parameter,
-            payload=f.payload,
-            evidence=f.evidence,
-            cwe=f.cwe,
-            owasp=f.owasp,
-            cvss_score=f.cvss_score,
-            confidence=f.confidence,
-            remediation=f.remediation,
-            ai_remediation=f.ai_remediation,
-            is_example=f.is_example,
-        )
-        for f in findings
-    ]
+
+def _build_summary(scan, findings) -> ScanSummary:  # type: ignore[no-untyped-def]
+    """Assemble a ``ScanSummary`` from ORM rows."""
+    finding_objs = [_row_to_finding(f) for f in findings]
 
     severity_counts: dict[str, int] = {
         "critical": 0,
@@ -90,25 +101,31 @@ def _build_summary(scan, findings) -> ScanSummary:  # type: ignore[no-untyped-de
     status_code=202,
     summary="Create and enqueue a new scan",
     response_description="Scan ID and initial status 'queued'.",
+    responses={
+        400: {"description": "Consent not confirmed."},
+        202: {"description": "Scan accepted and queued."},
+    },
 )
 async def create_scan(
     body: ScanRequest,
-    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ) -> dict:
     """
     Start a new DAST scan against ``target_url``.
 
-    The scan is persisted immediately with status ``queued`` and the engine
-    pipeline runs as a background task.  Poll ``GET /api/scans/{scan_id}`` or
-    open the WebSocket for live progress.
+    **Consent gate**: ``consent_confirmed`` must be ``true``.  Requests with
+    ``false`` are rejected with HTTP **400 Bad Request** and the message
+    ``"You must confirm you have permission to scan this target."``
 
-    Requires ``consent_confirmed=true`` — requests with false are rejected.
+    The scan is persisted immediately with status ``queued`` and the engine
+    pipeline runs as an ``asyncio`` background task.  Poll
+    ``GET /api/scans/{scan_id}`` or open ``/ws/scans/{scan_id}`` for live
+    progress.
     """
     if not body.consent_confirmed:
         raise HTTPException(
-            status_code=422,
-            detail="consent_confirmed must be true — you must have authorisation to test the target.",
+            status_code=400,
+            detail="You must confirm you have permission to scan this target.",
         )
 
     scan_id = str(uuid.uuid4())
@@ -119,9 +136,11 @@ async def create_scan(
         scan_id=scan_id,
         target_url=target_str,
         profile=body.profile,
+        consent_confirmed=body.consent_confirmed,
     )
 
-    background_tasks.add_task(run_scan, scan_id, target_str, body.profile)
+    # Schedule the pipeline — creates an asyncio.Task in the running loop.
+    start_scan_task(scan_id, body)
 
     return {"scan_id": scan_id, "status": "queued"}
 
@@ -132,9 +151,14 @@ async def create_scan(
     response_model=list[ScanSummary],
 )
 def list_scans(session: Session = Depends(get_session)) -> list[ScanSummary]:
-    """Return all scans, newest first, with a lightweight summary (no findings list)."""
+    """
+    Return all scans, newest first (by ``started_at``).
+
+    Includes the seeded example scan from Task S4 — those rows carry
+    ``is_example=true`` so the frontend can render a "Demo" badge.
+    """
     scans = crud.list_scans(session)
-    summaries = []
+    summaries: list[ScanSummary] = []
     for scan in scans:
         findings = crud.get_findings_for_scan(session, scan.id)
         summaries.append(_build_summary(scan, findings))
@@ -145,11 +169,108 @@ def list_scans(session: Session = Depends(get_session)) -> list[ScanSummary]:
     "/scans/{scan_id}",
     summary="Get a single scan with full findings",
     response_model=ScanSummary,
+    responses={404: {"description": "Scan not found."}},
 )
 def get_scan(scan_id: str, session: Session = Depends(get_session)) -> ScanSummary:
-    """Fetch the full ScanSummary including all Finding objects."""
+    """Fetch the full ``ScanSummary`` including all ``Finding`` objects."""
     scan = crud.get_scan(session, scan_id)
     if scan is None:
         raise HTTPException(status_code=404, detail=f"Scan '{scan_id}' not found.")
     findings = crud.get_findings_for_scan(session, scan_id)
     return _build_summary(scan, findings)
+
+
+@router.get(
+    "/scans/{scan_id}/report",
+    summary="Download scan report as JSON or HTML",
+    responses={
+        200: {"description": "Report file (application/json or text/html)."},
+        400: {"description": "Unsupported format."},
+        404: {"description": "Scan not found."},
+        409: {"description": "Scan not yet complete."},
+    },
+)
+def get_report(
+    scan_id: str,
+    format: str = Query(default="json", pattern="^(json|html)$"),
+    session: Session = Depends(get_session),
+):
+    """
+    Download a complete scan report.
+
+    ``format=json`` returns the ``ScanSummary`` serialised as JSON.
+    ``format=html`` returns a self-contained dark-theme HTML file that can be
+    opened offline — embeds all CSS inline, no external dependencies.
+
+    The scan must be in status ``done`` (reports for in-progress scans are
+    rejected with 409).
+    """
+    scan = crud.get_scan(session, scan_id)
+    if scan is None:
+        raise HTTPException(status_code=404, detail=f"Scan '{scan_id}' not found.")
+
+    if scan.status not in ("done", "failed", "blocked"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Scan is not yet complete (status='{scan.status}'). Try again when done.",
+        )
+
+    findings_rows = crud.get_findings_for_scan(session, scan_id)
+
+    # Build engine ScanResult for the reporter.
+    from engine.models import (
+        Finding as EngineFinding,
+        ScanResult as EngineScanResult,
+    )
+    from engine.reporter import build_json, build_html
+
+    engine_findings = [
+        EngineFinding(
+            id=f.id,
+            template_id=f.template_id,
+            title=f.title,
+            severity=f.severity,
+            url=f.url,
+            evidence=f.evidence,
+            cwe=f.cwe,
+            owasp=f.owasp,
+            cvss_score=f.cvss_score,
+            confidence=f.confidence,
+            remediation=f.remediation,
+            parameter=f.parameter,
+            payload=f.payload,
+            ai_remediation=f.ai_remediation,
+            is_example=f.is_example,
+        )
+        for f in findings_rows
+    ]
+
+    engine_result = EngineScanResult(
+        scan_id=scan.id,
+        target_url=scan.target_url,
+        status=scan.status,
+        started_at=scan.started_at,
+        finished_at=scan.finished_at,
+        endpoints_found=scan.endpoints_found,
+        findings=engine_findings,
+        risk_score=scan.risk_score,
+        is_example=scan.is_example,
+    )
+
+    if format == "json":
+        return JSONResponse(
+            content=build_json(engine_result),
+            headers={
+                "Content-Disposition": f'attachment; filename="probex-{scan_id[:8]}.json"'
+            },
+        )
+
+    # HTML
+    html_content = build_html(engine_result)
+    return StreamingResponse(
+        iter([html_content]),
+        media_type="text/html",
+        headers={
+            "Content-Disposition": f'attachment; filename="probex-{scan_id[:8]}.html"'
+        },
+    )
