@@ -3,8 +3,18 @@
  *
  * Rendered at /history.
  * Fetches GET /api/scans (newest first) and renders a card for each scan.
- * Scans with is_example=true receive a distinct "Example Report — full
- * coverage preview" badge so they are never confused with real live runs.
+ *
+ * Loading states
+ * --------------
+ * - **Skeleton** cards pulse while the first fetch is in flight.
+ * - **Backend offline** error card shows a clear "Start the backend" message
+ *   when fetch() rejects with a network error (backend not running).
+ * - **API error** card for any non-network failure.
+ *
+ * Example badge
+ * -------------
+ * Scans with is_example=true receive "Example Report — full coverage preview"
+ * so they are never confused with real live runs.
  */
 
 import { useEffect, useState } from 'react';
@@ -12,7 +22,7 @@ import { Link } from 'react-router-dom';
 import {
   Shield, Clock, Globe, ChevronRight,
   AlertTriangle, CheckCircle2, XCircle, Loader2,
-  Microscope, BarChart3, History, RefreshCw,
+  Microscope, BarChart3, History, RefreshCw, ServerCrash,
 } from 'lucide-react';
 
 import { listScans } from '../api/client';
@@ -70,6 +80,80 @@ function riskColor(score: number): string {
   if (score >= 70) return 'text-[var(--critical)]';
   if (score >= 40) return 'text-[var(--warning)]';
   return 'text-[var(--success)]';
+}
+
+/** True when the error looks like a network-level failure (backend down). */
+function isNetworkError(msg: string): boolean {
+  return (
+    msg.toLowerCase().includes('failed to fetch') ||
+    msg.toLowerCase().includes('networkerror') ||
+    msg.toLowerCase().includes('net::err') ||
+    msg.toLowerCase().includes('load failed')
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Skeleton card (shown while loading)
+// ---------------------------------------------------------------------------
+
+function SkeletonCard() {
+  return (
+    <div className="card p-5 animate-pulse space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="h-3 w-3 rounded bg-[var(--bg-hover)]" />
+        <div className="h-3 w-48 rounded bg-[var(--bg-hover)]" />
+        <div className="h-4 w-20 rounded-full bg-[var(--bg-hover)] ml-2" />
+      </div>
+      <div className="flex gap-4">
+        <div className="h-2.5 w-12 rounded bg-[var(--bg-hover)]" />
+        <div className="h-2.5 w-16 rounded bg-[var(--bg-hover)]" />
+        <div className="h-2.5 w-20 rounded bg-[var(--bg-hover)]" />
+      </div>
+      <div className="flex gap-2">
+        <div className="h-5 w-16 rounded-md bg-[var(--bg-hover)]" />
+        <div className="h-5 w-14 rounded-md bg-[var(--bg-hover)]" />
+      </div>
+      <div className="pt-2 border-t border-[var(--border)]">
+        <div className="h-2 w-56 rounded bg-[var(--bg-hover)]" />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Backend offline error card
+// ---------------------------------------------------------------------------
+
+function BackendOfflineCard({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="card p-8 border-[rgba(239,68,68,0.25)] flex flex-col items-center gap-5 text-center max-w-md mx-auto">
+      <div className="w-14 h-14 rounded-2xl bg-[rgba(239,68,68,0.1)] flex items-center justify-center">
+        <ServerCrash size={28} className="text-[var(--danger)]" />
+      </div>
+      <div>
+        <p className="font-bold text-[var(--text-primary)] text-base mb-1">Backend not running</p>
+        <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+          The ProbeX API server is not reachable at{' '}
+          <code className="text-[var(--accent)] font-mono text-xs bg-[var(--bg-hover)] px-1.5 py-0.5 rounded">
+            localhost:8000
+          </code>
+          . Start it with:
+        </p>
+        <pre className="mt-3 text-left text-xs font-mono bg-[var(--bg-hover)] border border-[var(--border)] rounded-lg p-3 text-[var(--accent-2)]">
+{`cd backend
+uvicorn app.main:app --reload`}
+        </pre>
+      </div>
+      <button
+        id="retry-backend-btn"
+        type="button"
+        onClick={onRetry}
+        className="flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--border)] text-sm text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all duration-200"
+      >
+        <RefreshCw size={13} /> Try again
+      </button>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -177,18 +261,24 @@ export default function ScanHistory() {
   const [scans, setScans] = useState<ScanSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [networkError, setNetworkError] = useState(false);
 
   async function fetchScans() {
     setLoading(true);
     setError(null);
+    setNetworkError(false);
     try {
       const data = await listScans();
-      // Ensure newest-first
       setScans([...data].sort(
         (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime(),
       ));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load scans.');
+      const msg = e instanceof Error ? e.message : 'Failed to load scans.';
+      if (isNetworkError(msg)) {
+        setNetworkError(true);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -247,31 +337,46 @@ export default function ScanHistory() {
           <div>
             <h1 className="text-2xl font-extrabold text-[var(--text-primary)]">Scan History</h1>
             <p className="text-sm text-[var(--text-muted)]">
-              {scans.length} scan{scans.length !== 1 ? 's' : ''} on record
+              {loading ? 'Loading…' : `${scans.length} scan${scans.length !== 1 ? 's' : ''} on record`}
             </p>
           </div>
         </div>
 
-        {/* Loading */}
+        {/* ── Skeleton loading ── */}
         {loading && (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 size={28} className="text-[var(--accent)] animate-spin" />
+          <div className="space-y-3" aria-label="Loading scans" aria-busy="true">
+            <div className="h-3 w-16 rounded bg-[var(--bg-hover)] animate-pulse mb-4" />
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
           </div>
         )}
 
-        {/* Error */}
-        {error && !loading && (
+        {/* ── Backend offline ── */}
+        {!loading && networkError && (
+          <BackendOfflineCard onRetry={() => void fetchScans()} />
+        )}
+
+        {/* ── Generic API error ── */}
+        {!loading && error && !networkError && (
           <div className="card p-5 border-[rgba(239,68,68,0.3)] flex items-start gap-3">
             <AlertTriangle size={16} className="text-[var(--danger)] flex-shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1">
               <p className="text-sm font-semibold text-[var(--danger)]">Could not load scans</p>
               <p className="text-xs text-[var(--text-muted)] mt-0.5">{error}</p>
+              <button
+                type="button"
+                onClick={() => void fetchScans()}
+                className="mt-3 text-xs text-[var(--accent)] hover:underline"
+              >
+                Try again
+              </button>
             </div>
           </div>
         )}
 
         {/* ── Real scans ── */}
-        {!loading && !error && (
+        {!loading && !error && !networkError && (
           <>
             {realScans.length > 0 ? (
               <section className="space-y-3" aria-label="Your scans">

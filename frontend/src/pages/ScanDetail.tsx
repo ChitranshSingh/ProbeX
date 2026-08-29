@@ -310,8 +310,30 @@ function SeverityDonut({ findings }: { findings: Finding[] }) {
 
 export default function ScanDetail() {
   const { id } = useParams<{ id: string }>();
-  useNavigate(); // kept for future programmatic redirects (e.g. after scan delete)
+  const navigate = useNavigate();
   const scanId = id ?? '';
+
+  // Initial REST load — ensures the page works on hard-reload when
+  // the WS buffer may not have replayed yet.
+  const [restScan, setRestScan] = useState<ScanSummary | null>(null);
+  const [restLoading, setRestLoading] = useState(true);
+  const [restError, setRestError] = useState<string | null>(null);
+  const [networkDown, setNetworkDown] = useState(false);
+
+  useEffect(() => {
+    setRestLoading(true);
+    getScan(scanId)
+      .then(data => { setRestScan(data); setRestLoading(false); })
+      .catch(e => {
+        const msg = e instanceof Error ? e.message : 'Error';
+        const isNet = msg.toLowerCase().includes('failed to fetch') ||
+                      msg.toLowerCase().includes('networkerror') ||
+                      msg.toLowerCase().includes('load failed');
+        setNetworkDown(isNet);
+        setRestError(msg);
+        setRestLoading(false);
+      });
+  }, [scanId]);
 
   // WebSocket state
   const socket = useScanSocket(scanId);
@@ -326,9 +348,7 @@ export default function ScanDetail() {
     return () => clearInterval(t);
   }, [socket.status]);
 
-  // Once done, also fetch from REST to pick up any findings the WS may have
-  // missed (e.g. if the user connected late and the buffer is unavailable).
-  const [restScan, setRestScan] = useState<ScanSummary | null>(null);
+  // On terminal status, re-fetch REST to pick up AI remediation written after scan end.
   useEffect(() => {
     if (!TERMINAL.has(socket.status)) return;
     getScan(scanId).then(setRestScan).catch(() => null);
@@ -411,6 +431,69 @@ export default function ScanDetail() {
       </header>
 
       <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 space-y-6">
+
+        {/* ── Backend offline ── */}
+        {!restLoading && networkDown && (
+          <div className="card p-8 border-[rgba(239,68,68,0.25)] flex flex-col items-center gap-5 text-center max-w-md mx-auto mt-12">
+            <div className="w-14 h-14 rounded-2xl bg-[rgba(239,68,68,0.1)] flex items-center justify-center">
+              <WifiOff size={28} className="text-[var(--danger)]" />
+            </div>
+            <div>
+              <p className="font-bold text-[var(--text-primary)] text-base mb-1">Backend not reachable</p>
+              <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+                Start the API server, then reload this page.
+              </p>
+              <pre className="mt-3 text-left text-xs font-mono bg-[var(--bg-hover)] border border-[var(--border)] rounded-lg p-3 text-[var(--accent-2)]">
+{`cd backend\nuvicorn app.main:app --reload`}
+              </pre>
+            </div>
+            <button type="button" onClick={() => navigate(-1)}
+              className="text-xs text-[var(--accent)] hover:underline">
+              ← Go back
+            </button>
+          </div>
+        )}
+
+        {/* ── Scan not found ── */}
+        {!restLoading && restError && !networkDown && (
+          <div className="card p-8 flex flex-col items-center gap-4 text-center max-w-md mx-auto mt-12">
+            <div className="w-14 h-14 rounded-2xl bg-[rgba(239,68,68,0.1)] flex items-center justify-center">
+              <XCircle size={28} className="text-[var(--danger)]" />
+            </div>
+            <div>
+              <p className="font-bold text-[var(--text-primary)] mb-1">Scan not found</p>
+              <p className="text-xs text-[var(--text-muted)] font-mono">{scanId}</p>
+              <p className="text-sm text-[var(--text-muted)] mt-2">{restError}</p>
+            </div>
+            <Link to="/history" className="text-xs text-[var(--accent)] hover:underline">
+              ← View scan history
+            </Link>
+          </div>
+        )}
+
+        {/* ── Initial skeleton (waiting for first REST response) ── */}
+        {restLoading && (
+          <div className="space-y-4 animate-pulse">
+            <div className="flex gap-3 items-center">
+              <div className="h-5 w-16 rounded bg-[var(--bg-hover)]" />
+              <div className="h-5 w-48 rounded bg-[var(--bg-hover)]" />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[0,1,2,3].map(i => (
+                <div key={i} className="card p-4 space-y-2">
+                  <div className="h-2 w-16 rounded bg-[var(--bg-hover)]" />
+                  <div className="h-5 w-12 rounded bg-[var(--bg-hover)]" />
+                </div>
+              ))}
+            </div>
+            <div className="card p-5 h-32 flex items-center justify-center">
+              <Loader2 size={24} className="text-[var(--accent)] animate-spin" />
+            </div>
+          </div>
+        )}
+
+        {/* ── Main content (shown once REST resolves without error) ── */}
+        {!restLoading && !restError && !networkDown && (<>
 
         {/* ── Scan identity ── */}
         <div className="flex flex-wrap items-start gap-4 justify-between">
@@ -700,6 +783,8 @@ export default function ScanDetail() {
             </div>
           </div>
         )}
+
+        </>)}
 
       </main>
 
