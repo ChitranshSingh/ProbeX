@@ -48,6 +48,7 @@ from engine.detectors.sqli import detect_sqli_error
 from engine.detectors.xss import detect_xss
 from engine.http_client import HttpClient
 from engine.reporter import build_result
+from ai.remediation import get_ai_remediation
 
 logger = logging.getLogger(__name__)
 
@@ -302,12 +303,45 @@ async def run_scan(scan_id: str, request: ScanRequest) -> None:
         )
 
         # ------------------------------------------------------------------
-        # Stage 3: analyzing
+        # Stage 3: analyzing  (AI remediation)
         # ------------------------------------------------------------------
         _db_update_status(scan_id, "analyzing")
         broadcast(scan_id, _status_msg("analyzing"))
-        broadcast(scan_id, _log_msg("Computing risk score…"))
-        # AI remediation loop deferred to Task S7.
+        broadcast(scan_id, _log_msg("Computing risk score and generating AI remediation…"))
+
+        # Run AI remediation for every finding discovered during fuzzing.
+        # get_ai_remediation() is guaranteed never to raise — it silently
+        # falls back to the offline library on any API failure.
+        n_findings = len(all_findings)
+        for ai_idx, f in enumerate(all_findings):
+            template_id = getattr(f, "template_id", "unknown")
+            broadcast(
+                scan_id,
+                _log_msg(
+                    f"[{ai_idx + 1}/{n_findings}] AI remediation for {template_id}…"
+                ),
+            )
+            ai_text = await get_ai_remediation(f)
+
+            # Persist ai_remediation back to the FindingRow in the database.
+            try:
+                finding_id = getattr(f, "id", None)
+                if finding_id:
+                    from sqlmodel import Session
+                    from app.db.models import FindingRow
+                    with Session(engine) as session:
+                        row = session.get(FindingRow, finding_id)
+                        if row:
+                            row.ai_remediation = ai_text
+                            session.add(row)
+                            session.commit()
+            except Exception as persist_exc:  # noqa: BLE001
+                logger.warning(
+                    "Could not persist ai_remediation for finding %s: %s",
+                    getattr(f, "id", "?"), persist_exc,
+                )
+
+        broadcast(scan_id, _log_msg(f"AI remediation complete for {n_findings} finding(s)."))
 
         scan_result = build_result(
             scan_id=scan_id,
