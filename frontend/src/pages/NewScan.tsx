@@ -1,423 +1,368 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Shield,
-  AlertTriangle,
-  Zap,
-  Globe,
-  Lock,
-  ChevronRight,
-  Loader2,
-  CheckCircle2,
+  Globe, Zap, Target, AlertTriangle, ChevronRight,
+  Clock, Shield, Check, Cpu, Lock, Terminal, ShieldAlert, FileCode, Layers, RefreshCw
 } from 'lucide-react';
 import { createScan } from '../api/client';
-import type { ScanProfile } from '../types';
+import { useTheme } from '../context/ThemeContext';
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+type Profile = 'quick' | 'standard';
 
-const PRACTICE_TARGET = 'http://testphp.vulnweb.com';
-
-const CONSENT_TEXT =
-  'I confirm I have explicit permission to test this target. Unauthorized scanning may be illegal.';
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function ProfileCard({
-  value,
-  selected,
-  onSelect,
-  icon,
-  label,
-  subtitle,
-  time,
-}: {
-  value: ScanProfile;
-  selected: boolean;
-  onSelect: (v: ScanProfile) => void;
-  icon: React.ReactNode;
+const PROFILES: {
+  id: Profile;
   label: string;
-  subtitle: string;
+  icon: typeof Zap;
   time: string;
-}) {
-  return (
-    <button
-      type="button"
-      id={`profile-${value}`}
-      onClick={() => onSelect(value)}
-      className={[
-        'relative flex flex-col gap-2 p-4 rounded-xl border text-left transition-all duration-200 cursor-pointer',
-        selected
-          ? 'border-[var(--accent)] bg-[rgba(0,212,255,0.07)] shadow-[0_0_0_1px_var(--accent)]'
-          : 'border-[var(--border)] bg-[var(--bg-hover)] hover:border-[rgba(0,212,255,0.4)] hover:bg-[rgba(0,212,255,0.04)]',
-      ].join(' ')}
-    >
-      {/* Selected indicator */}
-      {selected && (
-        <span className="absolute top-3 right-3 text-[var(--accent)]">
-          <CheckCircle2 size={16} />
-        </span>
-      )}
+  depth: string;
+  desc: string;
+  badgeColor: string;
+  borderColor: string;
+}[] = [
+  {
+    id: 'quick',
+    label: 'Quick Scan',
+    icon: Zap,
+    time: '~1–2 min',
+    depth: 'Depth 1 · 50 endpoints',
+    desc: 'Single-depth crawl with core detectors. Ideal for rapid feedback during development.',
+    badgeColor: 'var(--sev-info)',
+    borderColor: 'var(--sev-info-bd)',
+  },
+  {
+    id: 'standard',
+    label: 'Standard Scan',
+    icon: Target,
+    time: '~5–10 min',
+    depth: 'Depth 2 · 200 endpoints',
+    desc: 'Deep crawl with full payload library. Comprehensive security verification before deployment.',
+    badgeColor: 'var(--accent)',
+    borderColor: 'var(--accent-dim)',
+  },
+];
 
-      <span
-        className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-          selected ? 'bg-[rgba(0,212,255,0.15)] text-[var(--accent)]' : 'bg-[var(--bg-card)] text-[var(--text-muted)]'
-        }`}
-      >
-        {icon}
-      </span>
-
-      <div>
-        <p className={`font-semibold text-sm ${selected ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]'}`}>
-          {label}
-        </p>
-        <p className="text-xs text-[var(--text-muted)] mt-0.5">{subtitle}</p>
-      </div>
-
-      <span className="text-xs font-mono text-[var(--text-muted)] mt-auto pt-1 border-t border-[var(--border)]">
-        ~{time}
-      </span>
-    </button>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
+const DETECTORS = [
+  { label: 'Reflected Cross-Site Scripting (XSS)', icon: Zap, color: 'text-amber-500', tag: 'High' },
+  { label: 'SQL Injection (Error & Time-blind)', icon: ShieldAlert, color: 'text-rose-500', tag: 'Critical' },
+  { label: 'Security Headers Audit (CSP, HSTS)', icon: Shield, color: 'text-emerald-500', tag: 'Low' },
+  { label: 'Open Redirect & URL Parameter Fuzzing', icon: RefreshCw, color: 'text-cyan-500', tag: 'Medium' },
+  { label: 'Path Traversal & File Inclusion', icon: FileCode, color: 'text-indigo-500', tag: 'High' },
+  { label: 'Server-Side Template Injection (SSTI)', icon: Cpu, color: 'text-purple-500', tag: 'Critical' },
+  { label: 'Server-Side Request Forgery (SSRF)', icon: Layers, color: 'text-blue-500', tag: 'High' },
+];
 
 export default function NewScan() {
   const navigate = useNavigate();
-
-  const [targetUrl, setTargetUrl] = useState('');
-  const [profile, setProfile] = useState<ScanProfile>('quick');
+  const { theme } = useTheme();
+  const [url, setUrl]         = useState('');
+  const [profile, setProfile] = useState<Profile>('quick');
   const [consent, setConsent] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [urlError, setUrlError] = useState<string | null>(null);
+  const [busy, setBusy]       = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+  const [urlErr, setUrlErr]   = useState<string | null>(null);
 
-  // ---- URL validation ----
-  function validateUrl(raw: string): string | null {
-    if (!raw.trim()) return 'Target URL is required.';
+  function validateUrl(v: string) {
+    if (!v.trim()) return 'Target URL is required.';
     try {
-      const u = new URL(raw.trim());
-      if (!['http:', 'https:'].includes(u.protocol))
-        return 'URL must start with http:// or https://';
-      return null;
-    } catch {
-      return 'Please enter a valid URL (e.g. https://example.com).';
-    }
+      const u = new URL(v);
+      if (!['http:', 'https:'].includes(u.protocol)) return 'Target URL must start with http:// or https://';
+    } catch { return 'Please enter a valid URL (e.g. http://localhost:5500)'; }
+    return null;
   }
 
-  function handleUrlChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setTargetUrl(e.target.value);
-    if (urlError) setUrlError(validateUrl(e.target.value));
-  }
-
-  function fillPracticeTarget() {
-    setTargetUrl(PRACTICE_TARGET);
-    setUrlError(null);
-  }
-
-  // ---- Submit ----
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-
-    const urlErr = validateUrl(targetUrl);
-    if (urlErr) { setUrlError(urlErr); return; }
-
-    if (!consent) { setError('You must accept the consent statement before scanning.'); return; }
-
-    setLoading(true);
+    const ve = validateUrl(url);
+    if (ve) { setUrlErr(ve); return; }
+    if (!consent) { setError('You must confirm written authorization to scan this target.'); return; }
+    setBusy(true); setError(null);
     try {
-      const { scan_id } = await createScan({
-        target_url: targetUrl.trim(),
-        profile,
-        consent_confirmed: consent,
-      });
-      navigate(`/scans/${scan_id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start scan. Is the backend running?');
-    } finally {
-      setLoading(false);
+      const r = await createScan({ target_url: url, profile, consent_confirmed: true });
+      navigate(`/scans/${r.scan_id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to start security scan');
+      setBusy(false);
     }
   }
 
-  const canSubmit = consent && !loading && !!targetUrl.trim() && !urlError;
+  const QUICK_URLS = ['http://localhost:5500', 'http://localhost:3000', 'http://localhost:8080'];
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-[var(--bg-deep)] flex flex-col">
+    <div style={{ minHeight: '100vh', background: 'var(--bg-deep)' }}>
 
-      {/* ── Background ambient glow ── */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-0 overflow-hidden"
-      >
-        <div className="absolute -top-64 -left-64 w-[600px] h-[600px] rounded-full bg-[var(--accent)] opacity-[0.04] blur-[120px]" />
-        <div className="absolute -bottom-64 -right-32 w-[500px] h-[500px] rounded-full bg-[var(--accent-2)] opacity-[0.04] blur-[120px]" />
-      </div>
-
-      {/* ── Header / nav ── */}
-      <header className="relative z-10 border-b border-[var(--border)] bg-[rgba(10,14,26,0.8)] backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-3">
-          <Shield size={22} className="text-[var(--accent)]" />
-          <span className="font-bold text-lg tracking-tight text-gradient">ProbeX</span>
-          <span className="ml-2 text-[var(--text-muted)] text-sm hidden sm:block">
-            Dynamic Application Security Testing
+      {/* Compact Header Bar */}
+      <div className="page-header justify-between">
+        <div className="flex items-center gap-2.5">
+          <Shield size={16} className="text-emerald-500" />
+          <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>New Security Scan</p>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+            style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+            DAST Engine
           </span>
         </div>
-      </header>
+      </div>
 
-      {/* ── Page content ── */}
-      <main className="relative z-10 flex-1 flex items-start justify-center px-4 py-16 sm:py-24">
-        <div className="w-full max-w-2xl">
+      <div className="page-content py-6">
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6 max-w-6xl">
 
-          {/* ── Hero heading ── */}
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[rgba(0,212,255,0.3)] bg-[rgba(0,212,255,0.07)] text-[var(--accent)] text-xs font-medium mb-5">
-              <Zap size={12} />
-              Automated Vulnerability Scanner
-            </div>
-            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight mb-4">
-              <span className="text-[var(--text-primary)]">Find security flaws</span>
-              <br />
-              <span className="text-gradient">before attackers do</span>
-            </h1>
-            <p className="text-[var(--text-muted)] text-base sm:text-lg max-w-lg mx-auto leading-relaxed">
-              ProbeX crawls your app, fuzzes every parameter, and surfaces
-              real vulnerabilities — not just header misconfigurations.
-            </p>
-          </div>
+          {/* ── Left Column: Form Controls ─────────────────────── */}
+          <div className="space-y-6">
 
-          {/* ── Scan form card ── */}
-          <form
-            id="new-scan-form"
-            onSubmit={handleSubmit}
-            noValidate
-            className="card p-8 space-y-7 shadow-glow"
-          >
+            <form onSubmit={handleSubmit} noValidate className="space-y-6">
 
-            {/* ---- Target URL ---- */}
-            <div className="space-y-2">
-              <label
-                htmlFor="target-url"
-                className="block text-sm font-semibold text-[var(--text-primary)]"
-              >
-                Target URL
-                <span className="text-[var(--danger)] ml-1">*</span>
-              </label>
-
-              <div className="relative">
-                <Globe
-                  size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none"
-                />
-                <input
-                  id="target-url"
-                  type="url"
-                  name="target_url"
-                  placeholder="https://your-app.example.com"
-                  value={targetUrl}
-                  onChange={handleUrlChange}
-                  onBlur={() => setUrlError(validateUrl(targetUrl))}
-                  autoComplete="url"
-                  spellCheck={false}
-                  aria-describedby={urlError ? 'url-error' : undefined}
-                  aria-invalid={!!urlError}
-                  className={[
-                    'w-full bg-[var(--bg-hover)] text-[var(--text-primary)] placeholder-[var(--text-muted)]',
-                    'pl-9 pr-4 py-3 rounded-xl border text-sm font-mono transition-all duration-200',
-                    'focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent',
-                    urlError
-                      ? 'border-[var(--danger)]'
-                      : 'border-[var(--border)] hover:border-[rgba(0,212,255,0.3)]',
-                  ].join(' ')}
-                />
-              </div>
-
-              {urlError && (
-                <p id="url-error" className="flex items-center gap-1.5 text-xs text-[var(--danger)]" role="alert">
-                  <AlertTriangle size={12} />
-                  {urlError}
-                </p>
-              )}
-
-              {/* Practice target hint */}
-              <div className="flex items-center gap-2 pt-1">
-                <span className="text-xs text-[var(--text-muted)]">Don't have a target?</span>
-                <button
-                  type="button"
-                  id="fill-practice-target"
-                  onClick={fillPracticeTarget}
-                  className="text-xs text-[var(--accent)] hover:text-[var(--accent-2)] underline underline-offset-2 transition-colors duration-150 font-medium"
-                >
-                  Try a safe practice target ↗
-                </button>
-              </div>
-            </div>
-
-            {/* ---- Scan profile ---- */}
-            <div className="space-y-3">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">
-                Scan Profile
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <ProfileCard
-                  value="quick"
-                  selected={profile === 'quick'}
-                  onSelect={setProfile}
-                  icon={<Zap size={16} />}
-                  label="Quick"
-                  subtitle="Depth 1 crawl, reduced payload set"
-                  time="30 s"
-                />
-                <ProfileCard
-                  value="standard"
-                  selected={profile === 'standard'}
-                  onSelect={setProfile}
-                  icon={<Shield size={16} />}
-                  label="Standard"
-                  subtitle="Multi-depth crawl, full payload library"
-                  time="3 min"
-                />
-              </div>
-            </div>
-
-            {/* ---- Consent ---- */}
-            <div
-              className={[
-                'rounded-xl border p-4 transition-all duration-200',
-                consent
-                  ? 'border-[var(--success)] bg-[rgba(16,185,129,0.06)]'
-                  : 'border-[var(--border)] bg-[var(--bg-hover)]',
-              ].join(' ')}
-            >
-              <label
-                htmlFor="consent-checkbox"
-                className="flex items-start gap-3 cursor-pointer select-none group"
-              >
-                {/* Custom checkbox */}
-                <div className="relative mt-0.5 flex-shrink-0">
-                  <input
-                    id="consent-checkbox"
-                    type="checkbox"
-                    name="consent_confirmed"
-                    checked={consent}
-                    onChange={e => setConsent(e.target.checked)}
-                    className="sr-only peer"
-                    required
-                    aria-describedby="consent-text"
-                  />
-                  <div
-                    className={[
-                      'w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-200',
-                      consent
-                        ? 'bg-[var(--success)] border-[var(--success)]'
-                        : 'bg-transparent border-[var(--border)] group-hover:border-[var(--success)]',
-                    ].join(' ')}
-                  >
-                    {consent && (
-                      <svg viewBox="0 0 12 10" className="w-3 h-3 text-white fill-none stroke-current stroke-2">
-                        <polyline points="1,5 4,8 11,1" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <span
-                    id="consent-text"
-                    className="text-sm text-[var(--text-primary)] leading-snug"
-                  >
-                    {CONSENT_TEXT}
+              {/* Target URL Card */}
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <label htmlFor="target-url-input" className="heading-sm block"
+                    style={{ color: 'var(--text-primary)' }}>
+                    Target Web Application URL
+                  </label>
+                  <span className="text-[11px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                    HTTP / HTTPS Target
                   </span>
-                  <div className="flex items-center gap-1 mt-1.5">
-                    <Lock size={10} className="text-[var(--text-muted)]" />
-                    <span className="text-[10px] text-[var(--text-muted)]">
-                      Required — POST /api/scans returns HTTP 400 without this confirmation
-                    </span>
-                  </div>
                 </div>
-              </label>
+
+                <div className="relative mt-2">
+                  <Globe size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2"
+                    style={{ color: 'var(--text-muted)' }} />
+                  <input
+                    id="target-url-input"
+                    type="url"
+                    value={url}
+                    onChange={e => { setUrl(e.target.value); setUrlErr(null); }}
+                    onBlur={() => { if (url) setUrlErr(validateUrl(url)); }}
+                    placeholder="http://localhost:5500"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="input pl-10 text-sm"
+                    style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                  />
+                </div>
+
+                {urlErr && (
+                  <p className="mt-2 text-xs flex items-center gap-1.5 font-medium" style={{ color: 'var(--danger)' }}>
+                    <AlertTriangle size={13} /> {urlErr}
+                  </p>
+                )}
+
+                {/* Quick-fill pills */}
+                <div className="flex items-center gap-2 mt-3 flex-wrap">
+                  <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>Presets:</span>
+                  {QUICK_URLS.map(u => (
+                    <button
+                      key={u} type="button"
+                      onClick={() => { setUrl(u); setUrlErr(null); }}
+                      className="text-xs px-2.5 py-0.5 rounded-md border font-mono transition-all"
+                      style={{
+                        background: url === u ? 'var(--accent-dim)' : 'var(--bg-subtle)',
+                        borderColor: url === u ? 'var(--accent)' : 'var(--border)',
+                        color: url === u ? 'var(--accent)' : 'var(--text-secondary)',
+                      }}
+                    >
+                      {u}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Profile Selection Card */}
+              <div className="card p-5">
+                <p className="heading-sm mb-1" style={{ color: 'var(--text-primary)' }}>Scan Profile & Depth</p>
+                <p className="text-xs mb-3.5" style={{ color: 'var(--text-muted)' }}>
+                  Configure crawler breadth and attack vector depth.
+                </p>
+
+                <div className="grid sm:grid-cols-2 gap-3.5">
+                  {PROFILES.map(p => {
+                    const Icon = p.icon;
+                    const sel = profile === p.id;
+                    return (
+                      <button
+                        key={p.id} type="button" id={`profile-${p.id}`}
+                        onClick={() => setProfile(p.id)}
+                        className="text-left p-4 rounded-xl border transition-all relative overflow-hidden"
+                        style={{
+                          background: sel ? 'var(--accent-dim)' : 'var(--bg-card-alt)',
+                          borderColor: sel ? 'var(--accent)' : 'var(--border)',
+                          boxShadow: sel ? 'var(--shadow-card)' : 'none',
+                        }}
+                      >
+                        {sel && (
+                          <div className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full pulse-dot"
+                            style={{ background: 'var(--accent)' }} />
+                        )}
+
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-2.5"
+                          style={{
+                            background: sel ? 'var(--accent)' : 'var(--bg-subtle)',
+                            color: sel ? 'var(--accent-text)' : 'var(--text-muted)',
+                            border: '1px solid var(--border)',
+                          }}>
+                          <Icon size={16} />
+                        </div>
+
+                        <p className="text-sm font-bold mb-1" style={{ color: 'var(--text-primary)' }}>
+                          {p.label}
+                        </p>
+                        <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--text-muted)' }}>
+                          {p.desc}
+                        </p>
+                        <div className="flex gap-2">
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md"
+                            style={{ background: 'var(--bg-subtle)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                            {p.time}
+                          </span>
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md"
+                            style={{ background: 'var(--bg-subtle)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+                            {p.depth}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Consent Card */}
+              <div className="card p-4">
+                <label
+                  className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border transition-all"
+                  style={{
+                    background: consent ? 'var(--accent-dim)' : 'var(--bg-card-alt)',
+                    borderColor: consent ? 'var(--accent)' : 'var(--border)',
+                  }}
+                >
+                  <button
+                    type="button" role="checkbox" id="consent-checkbox" aria-checked={consent}
+                    onClick={() => setConsent(v => !v)}
+                    className="w-4 h-4 rounded flex-shrink-0 mt-0.5 flex items-center justify-center transition-all"
+                    style={{
+                      background: consent ? 'var(--accent)' : 'transparent',
+                      border: `2px solid ${consent ? 'var(--accent)' : 'var(--border-light)'}`,
+                    }}
+                  >
+                    {consent && <Check size={11} strokeWidth={3} style={{ color: 'var(--accent-text)' }} />}
+                  </button>
+                  <div>
+                    <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
+                      Authorization Confirmation
+                    </p>
+                    <p className="text-[11px] mt-0.5 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                      I possess written authorization to perform security testing against this target URL.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="p-3.5 rounded-xl flex items-center gap-3 text-sm font-medium"
+                  style={{ background: 'var(--sev-critical-bg)', border: '1px solid var(--sev-critical-bd)', color: 'var(--sev-critical)' }}>
+                  <AlertTriangle size={15} className="flex-shrink-0" /> {error}
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <div className="flex items-center gap-4">
+                <button
+                  id="launch-scan-btn" type="submit"
+                  disabled={busy || !url || !consent}
+                  className="btn btn-primary btn-lg"
+                >
+                  {busy ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      Initializing DAST Scan…
+                    </>
+                  ) : (
+                    <>
+                      <Zap size={16} />
+                      Launch DAST Security Scan
+                      <ChevronRight size={16} />
+                    </>
+                  )}
+                </button>
+                <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                  Live WebSocket Stream
+                </p>
+              </div>
+            </form>
+          </div>
+
+          {/* ── Right Column: Active Detectors & Info ───────────────── */}
+          <aside className="space-y-5">
+
+            {/* Detector Coverage Card */}
+            <div className="card p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="heading-sm flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                  <Shield size={15} className="text-emerald-500" />
+                  Active Detectors
+                </p>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded"
+                  style={{ background: 'var(--bg-subtle)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                  7 Enabled
+                </span>
+              </div>
+              <div className="space-y-2">
+                {DETECTORS.map(d => {
+                  const Icon = d.icon;
+                  return (
+                    <div key={d.label} className="flex items-center gap-2.5 p-2 rounded-lg" style={{ background: 'var(--bg-card-alt)' }}>
+                      <Icon size={14} className={d.color} />
+                      <span className="text-xs font-semibold flex-1 truncate" style={{ color: 'var(--text-primary)' }}>
+                        {d.label}
+                      </span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                        style={{
+                          background: d.tag === 'Critical' ? 'var(--sev-critical-bg)' : d.tag === 'High' ? 'var(--sev-high-bg)' : 'var(--sev-low-bg)',
+                          color: d.tag === 'Critical' ? 'var(--sev-critical)' : d.tag === 'High' ? 'var(--sev-high)' : 'var(--sev-low)',
+                        }}>
+                        {d.tag}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* ---- Global error ---- */}
-            {error && (
-              <div
-                className="flex items-start gap-2 p-3 rounded-lg bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.3)] text-[var(--danger)] text-sm"
-                role="alert"
-              >
-                <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {/* ---- Submit ---- */}
-            <button
-              id="start-scan-btn"
-              type="submit"
-              disabled={!canSubmit}
-              aria-disabled={!canSubmit}
-              className={[
-                'w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl',
-                'font-semibold text-sm transition-all duration-200',
-                canSubmit
-                  ? [
-                      'bg-gradient-to-r from-[var(--accent)] to-[var(--accent-2)]',
-                      'text-[var(--bg-deep)] shadow-glow cursor-pointer',
-                      'hover:shadow-[0_0_40px_rgba(0,212,255,0.3)] hover:scale-[1.01]',
-                      'active:scale-[0.99]',
-                    ].join(' ')
-                  : 'bg-[var(--bg-hover)] text-[var(--text-muted)] border border-[var(--border)] cursor-not-allowed',
-              ].join(' ')}
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  Starting scan…
-                </>
-              ) : (
-                <>
-                  <Shield size={16} />
-                  Start Scan
-                  <ChevronRight size={16} />
-                </>
-              )}
-            </button>
-
-            {/* Subtle hint when button is locked */}
-            {!consent && !loading && (
-              <p className="text-center text-xs text-[var(--text-muted)]">
-                Accept the consent statement to enable scanning
+            {/* Pipeline Stage Card */}
+            <div className="card p-4">
+              <p className="heading-sm mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                <Terminal size={15} className="text-blue-500" />
+                Pipeline Execution
               </p>
-            )}
-          </form>
+              <ol className="space-y-2.5">
+                {[
+                  { num: '01', label: 'BFS Crawler', desc: 'Discovers endpoints, forms, and inputs' },
+                  { num: '02', label: 'Payload Injection', desc: 'Fuzzes parameters with specialized vectors' },
+                  { num: '03', label: 'Baseline Diff', desc: 'Filters out false positives against baseline' },
+                  { num: '04', label: 'AI Remediation', desc: 'Generates context-aware fix guidance' },
+                ].map(s => (
+                  <li key={s.label} className="flex gap-2.5 items-start">
+                    <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded"
+                      style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+                      {s.num}
+                    </span>
+                    <div>
+                      <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{s.label}</p>
+                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{s.desc}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
 
-          {/* ── Feature pills ── */}
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            {[
-              '✦ XSS & SQL Injection',
-              '✦ SSRF & Path Traversal',
-              '✦ SSTI Detection',
-              '✦ Security Headers',
-              '✦ Baseline false-positive defence',
-            ].map(f => (
-              <span
-                key={f}
-                className="text-xs px-3 py-1 rounded-full border border-[var(--border)] text-[var(--text-muted)] bg-[var(--bg-card)]"
-              >
-                {f}
-              </span>
-            ))}
-          </div>
+            {/* Security Notice */}
+            <div className="card-sm p-3 flex items-start gap-2.5">
+              <Lock size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                Always perform vulnerability testing within isolated environments or on target systems where explicit consent is granted.
+              </p>
+            </div>
+          </aside>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

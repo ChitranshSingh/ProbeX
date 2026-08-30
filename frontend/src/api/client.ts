@@ -103,3 +103,20 @@ export async function downloadReport(
 // Re-export Finding for consumers that only import from api/client
 // ---------------------------------------------------------------------------
 export type { Finding, ScanSummary, ScanRequest };
+
+// ---------------------------------------------------------------------------
+// Delete endpoints
+// ---------------------------------------------------------------------------
+
+/** DELETE /api/scans/:id */
+export async function deleteScan(id: string): Promise<{ deleted: string }> {
+  return _fetch<{ deleted: string }>(`/api/scans/${id}`, { method: 'DELETE' });
+}
+
+/** DELETE /api/scans — clears all real scans (keeps examples by default) */
+export async function clearHistory(keepExamples = true): Promise<{ deleted_count: number }> {
+  return _fetch<{ deleted_count: number }>(
+    `/api/scans?keep_examples=${String(keepExamples)}`,
+    { method: 'DELETE' },
+  );
+}

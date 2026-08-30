@@ -274,3 +274,37 @@ def get_report(
             "Content-Disposition": f'attachment; filename="probex-{scan_id[:8]}.html"'
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Delete endpoints
+# ---------------------------------------------------------------------------
+
+@router.delete(
+    "/scans/{scan_id}",
+    summary="Delete a single scan and all its findings",
+    status_code=200,
+)
+async def delete_scan(
+    scan_id: str,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Permanently remove one scan record plus every finding attached to it."""
+    found = crud.delete_scan(session, scan_id)
+    if not found:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return {"deleted": scan_id}
+
+
+@router.delete(
+    "/scans",
+    summary="Clear scan history (keeps example scans by default)",
+    status_code=200,
+)
+async def clear_history(
+    keep_examples: bool = True,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Delete all real scans (and optionally example scans too)."""
+    count = crud.clear_scan_history(session, keep_examples=keep_examples)
+    return {"deleted_count": count}

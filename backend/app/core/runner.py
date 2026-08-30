@@ -259,6 +259,11 @@ async def run_scan(scan_id: str, request: ScanRequest) -> None:
         _db_update_status(scan_id, "fuzzing", endpoints_found=n_endpoints)
         broadcast(scan_id, _status_msg("fuzzing"))
 
+        # Track which origins have already been header-checked so we don't
+        # produce duplicate "Missing CSP" findings for every endpoint.
+        from urllib.parse import urlparse as _urlparse
+        checked_header_origins: set[str] = set()
+
         async with HttpClient() as client:
             for idx, ep in enumerate(endpoints):
                 pct = 25.0 + (idx / max(n_endpoints, 1)) * 50.0
@@ -286,13 +291,19 @@ async def run_scan(scan_id: str, request: ScanRequest) -> None:
                 except Exception as exc:
                     logger.warning("SQLi detector error on %s: %s", ep.url, exc)
 
-                # Headers detector (once per endpoint URL)
+                # Headers detector — once per unique origin (scheme+host) only.
+                # Checking every endpoint would produce N×3 duplicate header findings.
                 try:
-                    header_findings = await check_headers(client, ep.url)
-                    for hf in header_findings:
-                        _db_add_finding(scan_id, hf)
-                        broadcast(scan_id, _finding_msg(_finding_to_dict(hf)))
-                        all_findings.append(hf)
+                    parsed = _urlparse(ep.url)
+                    origin = f"{parsed.scheme}://{parsed.netloc}"
+                    if origin not in checked_header_origins:
+                        checked_header_origins.add(origin)
+                        header_findings = await check_headers(client, ep.url)
+                        for hf in header_findings:
+                            _db_add_finding(scan_id, hf)
+                            broadcast(scan_id, _finding_msg(_finding_to_dict(hf)))
+                            all_findings.append(hf)
+                            logger.info("Header finding '%s' at %s", hf.title, origin)
                 except Exception as exc:
                     logger.warning("Headers detector error on %s: %s", ep.url, exc)
 

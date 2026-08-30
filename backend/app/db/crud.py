@@ -1,12 +1,12 @@
-"""
-ProbeX – CRUD helpers for the database layer.
+﻿"""
+ProbeX â€“ CRUD helpers for the database layer.
 
 All database I/O goes through these thin functions so that:
   a) API route handlers stay lean.
   b) We have a single place to add caching or audit logging later.
   c) The engine package (engine/) never has to touch SQLModel directly.
 
-Imported schemas come from ``app.schemas`` — nothing is redefined here.
+Imported schemas come from ``app.schemas`` â€” nothing is redefined here.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ def create_scan(
     profile:
         ``"quick"`` or ``"standard"``.
     consent_confirmed:
-        Mirrors the caller's consent flag — stored for audit purposes.
+        Mirrors the caller's consent flag â€” stored for audit purposes.
     is_example:
         True for seed-script injected demo scans.
     """
@@ -180,7 +180,7 @@ def add_finding(session: Session, finding: Finding, scan_id: str) -> FindingRow:
 
 # Backwards-compat alias used by seed script.
 def create_finding(session: Session, finding: Finding, scan_id: str) -> FindingRow:
-    """Alias for :func:`add_finding` — kept for backwards compatibility."""
+    """Alias for :func:`add_finding` â€” kept for backwards compatibility."""
     return add_finding(session, finding, scan_id)
 
 
@@ -192,3 +192,60 @@ def get_findings_for_scan(session: Session, scan_id: str) -> list[FindingRow]:
         .order_by(FindingRow.cvss_score.desc())  # type: ignore[arg-type]
     )
     return list(session.exec(statement).all())
+
+
+def delete_scan(session: Session, scan_id: str) -> bool:
+    """Delete a scan and all its findings. Returns True if found."""
+    scan = session.get(ScanRow, scan_id)
+    if scan is None:
+        return False
+    findings = session.exec(select(FindingRow).where(FindingRow.scan_id == scan_id)).all()
+    for f in findings:
+        session.delete(f)
+    session.delete(scan)
+    session.commit()
+    return True
+
+
+def clear_scan_history(session: Session, keep_examples: bool = True) -> int:
+    """Delete all non-example scans. Returns count deleted."""
+    from sqlmodel import col
+    stmt = select(ScanRow)
+    if keep_examples:
+        stmt = stmt.where(col(ScanRow.is_example) == False)
+    scans = list(session.exec(stmt).all())
+    for scan in scans:
+        findings = session.exec(select(FindingRow).where(FindingRow.scan_id == scan.id)).all()
+        for f in findings:
+            session.delete(f)
+        session.delete(scan)
+    session.commit()
+    return len(scans)
+
+
+def delete_scan(session: Session, scan_id: str) -> bool:
+    """Delete a scan and all its findings. Returns True if found."""
+    scan = session.get(ScanRow, scan_id)
+    if scan is None:
+        return False
+    findings = session.exec(select(FindingRow).where(FindingRow.scan_id == scan_id)).all()
+    for f in findings:
+        session.delete(f)
+    session.delete(scan)
+    session.commit()
+    return True
+
+
+def clear_scan_history(session: Session, keep_examples: bool = True) -> int:
+    """Delete all non-example scans and their findings. Returns count deleted."""
+    stmt = select(ScanRow)
+    if keep_examples:
+        stmt = stmt.where(ScanRow.is_example == False)
+    scans = list(session.exec(stmt).all())
+    for scan in scans:
+        findings = session.exec(select(FindingRow).where(FindingRow.scan_id == scan.id)).all()
+        for f in findings:
+            session.delete(f)
+        session.delete(scan)
+    session.commit()
+    return len(scans)

@@ -1,54 +1,153 @@
 /*
- * ProbeX – design tokens
- *
- * These CSS custom properties are the single source of truth for the colour
- * palette.  They are intentionally kept in sync with the design-token
- * constants in backend/engine/reporter.py (_BG_DEEP, _ACCENT, …) so that
- * the live dashboard and the exported self-contained HTML report look
- * identical.
- *
- * Usage:
- *   color: var(--text-primary);
- *   background: var(--bg-card);
+ * ProbeX – Design Tokens v8 (Rich Green Sidebar & Warm Soothing Light Mode)
+ * 
+ * Elegant forest-emerald sidebar branding in Light Mode + warm porcelain slate content area.
  */
 
-:root {
-  /* ── Backgrounds ─────────────────────────────────────── */
-  --bg-deep:    #0a0e1a;   /* page background (deepest)        */
-  --bg-card:    #111827;   /* card / panel surface             */
-  --bg-hover:   #1e293b;   /* hover state for interactive rows */
+:root, [data-theme="dark"] {
+  /* ── Dark Mode Backgrounds ────────────────────── */
+  --bg-deep:       #0a0e17;   /* Deep slate midnight root */
+  --bg-surface:    #111827;   /* Headers */
+  --bg-card:       #1e293b;   /* Cards surface */
+  --bg-card-alt:   #162032;   /* Alternate card surface */
+  --bg-hover:      #26334d;   /* Hover states */
+  --bg-input:      #0f172a;   /* Input backgrounds */
+  --bg-subtle:     #131c2e;   /* Table headers & inset areas */
 
-  /* ── Borders ─────────────────────────────────────────── */
-  --border:     #1e3a5f;   /* subtle border / divider line     */
+  /* ── Dark Mode Sidebar ────────────────────────── */
+  --sidebar-bg:               #0e1726;   /* Midnight navy sidebar */
+  --sidebar-border:           #24344d;   /* Sidebar border */
+  --sidebar-text-primary:     #f8fafc;
+  --sidebar-text-muted:       #94a3b8;
+  --sidebar-text-faint:       #64748b;
+  --sidebar-nav-hover-bg:     rgba(255, 255, 255, 0.06);
+  --sidebar-nav-active-bg:    rgba(16, 185, 129, 0.16);
+  --sidebar-nav-active-text:  #34d399;
+  --sidebar-nav-active-bd:    rgba(16, 185, 129, 0.3);
 
-  /* ── Accent / Brand ──────────────────────────────────── */
-  --accent:     #00d4ff;   /* primary accent (cyan)            */
-  --accent-2:   #00f5c4;   /* secondary accent (teal-green)    */
+  /* ── Dark Mode Borders ────────────────────────── */
+  --border:        #2d3b53;   /* Slate border */
+  --border-light:  #3b4e6d;   /* Hover border */
 
-  /* ── Semantic status ─────────────────────────────────── */
-  --success:    #10b981;   /* positive / ok                    */
-  --warning:    #f59e0b;   /* caution / medium severity        */
-  --danger:     #ef4444;   /* high severity                    */
-  --critical:   #dc2626;   /* critical severity (deepest red)  */
+  /* ── Dark Mode Accents ────────────────────────── */
+  --accent:          #10b981;   /* Vibrant Emerald Green CTA */
+  --accent-hover:    #059669;   /* Darker Emerald hover */
+  --accent-blue:     #3b82f6;   /* Sapphire Blue */
+  --accent-orange:   #f97316;   /* Energetic Orange */
+  --accent-text:     #ffffff;   /* Text on buttons */
+  --accent-dim:      rgba(16, 185, 129, 0.14);
 
-  /* ── Typography ──────────────────────────────────────── */
-  --text-primary: #f1f5f9; /* body copy                        */
-  --text-muted:   #94a3b8; /* secondary / label text           */
+  /* ── Dark Mode Typography ─────────────────────── */
+  --text-primary:    #f8fafc;   /* Primary text */
+  --text-secondary:  #cbd5e1;   /* Secondary text */
+  --text-muted:      #94a3b8;   /* Muted text */
+  --text-faint:      #64748b;   /* Subtle labels */
 
-  /* ── Severity tokens (mapped to above) ──────────────── */
-  --sev-critical: #dc2626;
-  --sev-high:     #f97316;
-  --sev-medium:   #f59e0b;
-  --sev-low:      #4ade80;
-  --sev-info:     #60a5fa;
+  /* ── Severities & Status ──────────────────────── */
+  --success:         #10b981;
+  --warning:         #f59e0b;
+  --danger:          #f43f5e;
 
-  /* ── Radii ───────────────────────────────────────────── */
-  --radius-sm:  4px;
+  --sev-critical:    #f43f5e;
+  --sev-critical-bg: rgba(244, 63, 94, 0.14);
+  --sev-critical-bd: rgba(244, 63, 94, 0.35);
+
+  --sev-high:        #f97316;
+  --sev-high-bg:     rgba(249, 115, 22, 0.14);
+  --sev-high-bd:     rgba(249, 115, 22, 0.35);
+
+  --sev-medium:      #facc15;
+  --sev-medium-bg:   rgba(250, 204, 21, 0.14);
+  --sev-medium-bd:   rgba(250, 204, 21, 0.35);
+
+  --sev-low:         #10b981;
+  --sev-low-bg:      rgba(16, 185, 129, 0.14);
+  --sev-low-bd:      rgba(16, 185, 129, 0.35);
+
+  --sev-info:        #3b82f6;
+  --sev-info-bg:     rgba(59, 130, 246, 0.14);
+  --sev-info-bd:     rgba(59, 130, 246, 0.35);
+
+  --log-bg:          #060a12;
+
+  --shadow-card:     0 4px 18px -2px rgba(0, 0, 0, 0.4), 0 2px 6px -1px rgba(0, 0, 0, 0.25);
+  --shadow-lg:       0 12px 30px -5px rgba(0, 0, 0, 0.5);
+  
+  --radius-sm:  6px;
   --radius-md:  8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
 
-  /* ── Shadows / glows ─────────────────────────────────── */
-  --glow-accent: 0 0 32px rgba(0, 212, 255, 0.12);
-  --glow-card:   0 4px 24px rgba(0, 0, 0, 0.4);
+  --sidebar-w: 224px;
+  --header-h:  56px;
+}
+
+[data-theme="light"] {
+  /* ── Light Mode Backgrounds (Warm Porcelain & Soft Slate) ── */
+  --bg-deep:       #ebf0f5;   /* Warm soft porcelain slate — NOT harsh stark white! */
+  --bg-surface:    #ffffff;   /* Clean white header bar */
+  --bg-card:       #ffffff;   /* Pure crisp white cards */
+  --bg-card-alt:   #f4f7fa;   /* Alternate card surface */
+  --bg-hover:      #e2e8f0;   /* Hover state */
+  --bg-input:      #ffffff;   /* Input background */
+  --bg-subtle:     #f1f5f9;   /* Table headers & inset areas */
+
+  /* ── Light Mode Rich Dark Emerald Sidebar ──────── */
+  --sidebar-bg:               #064e3b;   /* Rich Deep Emerald Green Sidebar */
+  --sidebar-border:           #047857;   /* Forest Emerald Border */
+  --sidebar-text-primary:     #ffffff;   /* Crisp white text */
+  --sidebar-text-muted:       #a7f3d0;   /* Light mint secondary text */
+  --sidebar-text-faint:       #6ee7b7;   /* Mint subtle text */
+  --sidebar-nav-hover-bg:     rgba(255, 255, 255, 0.1);
+  --sidebar-nav-active-bg:    #047857;   /* Solid Vibrant Emerald Active Nav */
+  --sidebar-nav-active-text:  #ffffff;   /* Pure white active text */
+  --sidebar-nav-active-bd:    #10b981;
+
+  /* ── Light Mode Borders ───────────────────────── */
+  --border:        #cbd5e1;   /* Slate-300 clean border */
+  --border-light:  #94a3b8;   /* Hover border */
+
+  /* ── Light Mode Primary Accents (Emerald, Blue, Orange) ── */
+  --accent:          #059669;   /* Crisp Emerald Green Primary CTA */
+  --accent-hover:    #047857;   /* Richer Green hover */
+  --accent-blue:     #2563eb;   /* Vibrant Sapphire Blue */
+  --accent-orange:   #ea580c;   /* Rich Orange Accent */
+  --accent-text:     #ffffff;   /* Text on buttons */
+  --accent-dim:      rgba(5, 150, 105, 0.12);
+
+  /* ── Light Mode Typography ────────────────────── */
+  --text-primary:    #0f172a;   /* Slate-900 sharp dark text */
+  --text-secondary:  #334155;   /* Slate-700 secondary text */
+  --text-muted:      #64748b;   /* Slate-500 muted text */
+  --text-faint:      #94a3b8;   /* Slate-400 subtle text */
+
+  /* ── Severities & Status ──────────────────────── */
+  --success:         #059669;
+  --warning:         #d97706;
+  --danger:          #e11d48;
+
+  --sev-critical:    #be123c;
+  --sev-critical-bg: #ffe4e6;
+  --sev-critical-bd: #fca5a5;
+
+  --sev-high:        #c2410c;
+  --sev-high-bg:     #ffedd5;
+  --sev-high-bd:     #fdba74;
+
+  --sev-medium:      #854d0e;
+  --sev-medium-bg:   #fef9c3;
+  --sev-medium-bd:   #fde047;
+
+  --sev-low:         #047857;
+  --sev-low-bg:      #d1fae5;
+  --sev-low-bd:      #6ee7b7;
+
+  --sev-info:        #1d4ed8;
+  --sev-info-bg:     #dbeafe;
+  --sev-info-bd:     #93c5fd;
+
+  --log-bg:          #0f172a;
+
+  --shadow-card:     0 2px 5px rgba(15, 23, 42, 0.06), 0 6px 18px -2px rgba(15, 23, 42, 0.04);
+  --shadow-lg:       0 12px 28px -5px rgba(15, 23, 42, 0.12);
 }

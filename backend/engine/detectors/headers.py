@@ -1,5 +1,5 @@
-"""
-ProbeX Engine – security-headers detector.
+﻿"""
+ProbeX Engine â€“ security-headers detector.
 
 Makes one clean GET request per page (no payload injection) and inspects the
 response headers for the presence of mandatory security headers.  Missing
@@ -7,12 +7,12 @@ headers are reported as findings with appropriate severity.
 
 Checks performed
 ----------------
-- Content-Security-Policy            → low severity
-- X-Frame-Options                    → low severity
-- X-Content-Type-Options             → info severity
-- Strict-Transport-Security          → medium severity (HTTPS targets only)
+- Content-Security-Policy            â†’ low severity
+- X-Frame-Options                    â†’ low severity
+- X-Content-Type-Options             â†’ info severity
+- Strict-Transport-Security          â†’ medium severity (HTTPS targets only)
 
-Zero FastAPI / SQLModel imports — this module must stay standalone.
+Zero FastAPI / SQLModel imports â€” this module must stay standalone.
 """
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ _HSTS_CHECK: tuple[str, str, str, float, str, str] = (
     ),
 )
 
-_OWASP_A05 = "A05:2021 – Security Misconfiguration"
+_OWASP_A05 = "A05:2021 â€“ Security Misconfiguration"
 _TEMPLATE_ID = "missing-security-header"
 
 
@@ -140,7 +140,7 @@ async def check_headers(
                     cwe=cwe,
                     owasp=_OWASP_A05,
                     cvss_score=cvss,
-                    confidence=1.0,  # header absence is a deterministic check
+                    confidence=0.97,  # header absence is deterministic but policy-dependent
                     remediation=remediation,
                 )
             )
@@ -165,9 +165,10 @@ async def check_headers(
                     cwe=cwe,
                     owasp=_OWASP_A05,
                     cvss_score=cvss,
-                    confidence=1.0,
+                    confidence=0.95,
                     remediation=remediation,
                 )
             )
 
     return findings
+

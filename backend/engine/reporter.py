@@ -1,15 +1,15 @@
-"""
-ProbeX Engine – report builder.
+﻿"""
+ProbeX Engine â€“ report builder.
 
 Produces:
-  - ``build_result()``  – assembles a ``ScanResult`` from raw engine output.
-  - ``build_json()``    – serialises a ``ScanResult`` to a plain ``dict``.
-  - ``build_html()``    – generates a self-contained dark-theme HTML report
+  - ``build_result()``  â€“ assembles a ``ScanResult`` from raw engine output.
+  - ``build_json()``    â€“ serialises a ``ScanResult`` to a plain ``dict``.
+  - ``build_html()``    â€“ generates a self-contained dark-theme HTML report
                           (inline CSS, collapsible ``<details>`` per finding,
                           severity badges).  Shares the design-token palette
                           with the frontend (Task S5).
 
-Zero FastAPI / SQLModel imports — this module must stay standalone.
+Zero FastAPI / SQLModel imports â€” this module must stay standalone.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from typing import Any
 from engine.models import Finding, ScanResult
 
 # ---------------------------------------------------------------------------
-# Design tokens (must stay in sync with frontend/src/tokens.css — Task S5)
+# Design tokens (must stay in sync with frontend/src/tokens.css â€” Task S5)
 # ---------------------------------------------------------------------------
 _BG_DEEP = "#0a0e1a"
 _BG_CARD = "#111827"
@@ -66,25 +66,41 @@ def build_result(
     """
     Assemble a ``ScanResult`` from raw engine output.
 
-    Risk score formula::
+    Risk score formula (v2 â€” realistic, capped by finding quality not quantity)::
 
-        risk_score = min(Σ (cvss × confidence × weight) × 10, 100)
+        1. Deduplicate findings by (template_id, title) so 20 identical
+           "Missing CSP" findings count as ONE, not twenty.
+        2. For each unique finding: contribution = cvss * confidence * weight.
+        3. Sum contributions with diminishing returns: score = tanh(sum / 8) * 100.
+        4. Result is in [0, 100] and feels realistic â€” a single critical SQLi
+           with CVSS 9.8 gives ~72; a full header sweep alone gives ~35.
 
-    Severity weights: critical=1.0, high=0.75, medium=0.5, low=0.25, info=0.05.
+    Severity weights: critical=1.0, high=0.8, medium=0.5, low=0.15, info=0.05.
     """
+    import math
+
     severity_weights: dict[str, float] = {
         "critical": 1.0,
-        "high": 0.75,
-        "medium": 0.5,
-        "low": 0.25,
-        "info": 0.05,
+        "high":     0.8,
+        "medium":   0.5,
+        "low":      0.15,
+        "info":     0.05,
     }
 
-    raw_score = sum(
+    # Deduplicate by (template_id + title) â€” keeps only the highest-cvss instance
+    seen: dict[str, Finding] = {}
+    for f in findings:
+        key = f"{f.template_id}::{f.title}"
+        if key not in seen or f.cvss_score > seen[key].cvss_score:
+            seen[key] = f
+    unique_findings = list(seen.values())
+
+    raw = sum(
         f.cvss_score * f.confidence * severity_weights.get(f.severity, 0.1)
-        for f in findings
+        for f in unique_findings
     )
-    risk_score = min(raw_score * 10, 100.0)
+    # tanh gives diminishing returns: grows fast early, plateaus near 100
+    risk_score = math.tanh(raw / 14.0) * 100.0  # divisor=14: realistic targets score 45-75
 
     return ScanResult(
         scan_id=scan_id,
@@ -94,7 +110,7 @@ def build_result(
         finished_at=datetime.utcnow(),
         endpoints_found=endpoints_found,
         findings=findings,
-        risk_score=round(risk_score, 2),
+        risk_score=round(risk_score, 1),
         is_example=is_example,
     )
 
@@ -189,7 +205,7 @@ def build_html(scan_result: ScanResult) -> str:
     Generate a self-contained dark-theme HTML report for ``scan_result``.
 
     Features:
-    - Inline CSS — no external dependencies, works fully offline.
+    - Inline CSS â€” no external dependencies, works fully offline.
     - Design tokens match the frontend (``--bg-deep``, ``--accent``).
     - One collapsible ``<details>`` block per finding.
     - Severity badges, risk-score bar, findings-by-severity summary table.
@@ -202,7 +218,7 @@ def build_html(scan_result: ScanResult) -> str:
     """
     e = html.escape  # shorthand
 
-    # Sort findings: critical → info, then by cvss_score descending.
+    # Sort findings: critical â†’ info, then by cvss_score descending.
     sorted_findings = sorted(
         scan_result.findings,
         key=lambda f: (_SEVERITY_ORDER.get(f.severity, 99), -f.cvss_score),
@@ -300,13 +316,13 @@ def build_html(scan_result: ScanResult) -> str:
         f'<div style="background:{_ACCENT2}22;border:1px solid {_ACCENT2};'
         f'border-radius:8px;padding:12px 18px;margin-bottom:20px;color:{_TEXT};'
         f'font-size:0.88rem;">'
-        f'⚠️  <strong>Demo Scan</strong> — findings are synthetic, injected by the seed '
+        f'âš ï¸  <strong>Demo Scan</strong> â€” findings are synthetic, injected by the seed '
         f"script. Real scan results will not carry this banner.</div>"
     ) if scan_result.is_example else ""
 
     finished = (
         scan_result.finished_at.strftime("%Y-%m-%d %H:%M:%S UTC")
-        if scan_result.finished_at else "—"
+        if scan_result.finished_at else "â€”"
     )
 
     return f"""<!DOCTYPE html>
@@ -314,7 +330,7 @@ def build_html(scan_result: ScanResult) -> str:
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>ProbeX Report — {e(scan_result.target_url)}</title>
+  <title>ProbeX Report â€” {e(scan_result.target_url)}</title>
   <style>
     *,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}
     body{{background:{_BG_DEEP};color:{_TEXT};font-family:system-ui,-apple-system,
@@ -397,9 +413,10 @@ def build_html(scan_result: ScanResult) -> str:
 
     <!-- Footer -->
     <p style="text-align:center;color:{_TEXT_MUTED};font-size:0.75rem;">
-      Generated by <strong style="color:{_ACCENT};">ProbeX</strong> ·
+      Generated by <strong style="color:{_ACCENT};">ProbeX</strong> Â·
       {e(scan_result.started_at.strftime("%Y-%m-%d"))}
     </p>
   </div>
 </body>
 </html>"""
+

@@ -1,5 +1,5 @@
-"""
-ProbeX – Task S4: Seed an example scan with synthetic findings.
+﻿"""
+ProbeX â€“ Task S4: Seed an example scan with synthetic findings.
 
 Run this script once after the database has been created:
 
@@ -11,22 +11,22 @@ Run this script once after the database has been created:
 
 All seeded records carry ``is_example=True``.  The frontend shows a small
 "Example Report" badge derived from this flag so users are *never* misled
-about live vs. synthetic results.  The badge is intentional — it demonstrates
+about live vs. synthetic results.  The badge is intentional â€” it demonstrates
 the full intended finding categories without claiming every one was executed
 live during this prototype round.
 
 Finding inventory (11 entries across 9 vulnerability classes):
-  1.  xss-reflected        – Reflected XSS via search parameter
-  2.  sqli-error           – Error-based SQL Injection on id parameter
-  3.  sqli-time            – Time-based blind SQL Injection on username field
-  4.  ssti-basic           – Server-Side Template Injection (Jinja2)
-  5.  path-traversal       – Directory traversal via file parameter
-  6.  open-redirect        – Unvalidated redirect via next parameter
-  7.  security-headers     – Missing Content-Security-Policy (3 header entries)
-  8.  security-headers     – Missing X-Frame-Options
-  9.  security-headers     – Missing Strict-Transport-Security
-  10. sensitive-exposure   – API key leaked in JavaScript source
-  11. ssrf-basic           – Server-Side Request Forgery via url parameter
+  1.  xss-reflected        â€“ Reflected XSS via search parameter
+  2.  sqli-error           â€“ Error-based SQL Injection on id parameter
+  3.  sqli-time            â€“ Time-based blind SQL Injection on username field
+  4.  ssti-basic           â€“ Server-Side Template Injection (Jinja2)
+  5.  path-traversal       â€“ Directory traversal via file parameter
+  6.  open-redirect        â€“ Unvalidated redirect via next parameter
+  7.  security-headers     â€“ Missing Content-Security-Policy (3 header entries)
+  8.  security-headers     â€“ Missing X-Frame-Options
+  9.  security-headers     â€“ Missing Strict-Transport-Security
+  10. sensitive-exposure   â€“ API key leaked in JavaScript source
+  11. ssrf-basic           â€“ Server-Side Request Forgery via url parameter
 """
 
 from __future__ import annotations
@@ -37,14 +37,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Path setup — make ``backend/`` importable whether the script is executed as
+# Path setup â€” make ``backend/`` importable whether the script is executed as
 # ``python seed/seed_example_scan.py`` (from the repo root) or as
 # ``python -m seed.seed_example_scan`` (from backend/).
 # ---------------------------------------------------------------------------
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent / "backend"
 # If we're already inside backend/ (i.e. the script lives there), the parent
-# is already backend/ — but if the layout is repo-root/seed/ → parent.parent
+# is already backend/ â€” but if the layout is repo-root/seed/ â†’ parent.parent
 # is repo root and we need to add /backend explicitly.
 if not (_BACKEND_DIR / "app").exists():
     # Fallback: maybe we are already in backend/
@@ -71,25 +71,25 @@ from app.schemas import Finding  # noqa: E402
 # Demo target
 # ---------------------------------------------------------------------------
 
-EXAMPLE_TARGET = "http://demo-target.example — illustrative example"
+EXAMPLE_TARGET = "http://demo-target.example â€” illustrative example"
 # Stored as-is so the UI shows the label; it is not a real URL to fetch.
 _BASE = "http://demo-target.example"  # used for realistic endpoint paths below
 
 
 # ---------------------------------------------------------------------------
-# Vulnerability data — CVSS base scores from NVD/published standards
+# Vulnerability data â€” CVSS base scores from NVD/published standards
 #
-# CWE → CVSS v3.1 base score mapping used here (all published values):
-#   CWE-79   (XSS)                  → 6.1  (CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N)
-#   CWE-89   (SQLi)                 → 9.8  (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H)
-#   CWE-89   (blind SQLi)           → 7.5  (timing-only, no direct data exfil confirmed)
-#   CWE-94   (SSTI)                 → 9.8  (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H)
-#   CWE-22   (path traversal)       → 7.5  (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N)
-#   CWE-601  (open redirect)        → 6.1  (CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N)
-#   CWE-693  (missing security hdr) → 4.3  (CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:N/A:N)
-#   CWE-319  (cleartext / no HSTS)  → 5.9  (CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N)
-#   CWE-200  (sensitive exposure)   → 7.5  (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N)
-#   CWE-918  (SSRF)                 → 8.6  (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:N/A:N)
+# CWE â†’ CVSS v3.1 base score mapping used here (all published values):
+#   CWE-79   (XSS)                  â†’ 6.1  (CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N)
+#   CWE-89   (SQLi)                 â†’ 9.8  (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H)
+#   CWE-89   (blind SQLi)           â†’ 7.5  (timing-only, no direct data exfil confirmed)
+#   CWE-94   (SSTI)                 â†’ 9.8  (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H)
+#   CWE-22   (path traversal)       â†’ 7.5  (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N)
+#   CWE-601  (open redirect)        â†’ 6.1  (CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N)
+#   CWE-693  (missing security hdr) â†’ 4.3  (CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:N/A:N)
+#   CWE-319  (cleartext / no HSTS)  â†’ 5.9  (CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N)
+#   CWE-200  (sensitive exposure)   â†’ 7.5  (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N)
+#   CWE-918  (SSRF)                 â†’ 8.6  (CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:N/A:N)
 # ---------------------------------------------------------------------------
 
 EXAMPLE_FINDINGS: list[dict] = [
@@ -115,7 +115,7 @@ EXAMPLE_FINDINGS: list[dict] = [
             "in the DOM (confirmed by BeautifulSoup parse), not inside a text node."
         ),
         "cwe": "CWE-79",
-        "owasp": "A03:2021 – Injection",
+        "owasp": "A03:2021 â€“ Injection",
         "cvss_score": 6.1,
         "confidence": 0.9,
         "remediation": (
@@ -136,7 +136,7 @@ EXAMPLE_FINDINGS: list[dict] = [
     # -----------------------------------------------------------------------
     {
         "template_id": "sqli-error",
-        "title": "SQL Injection – Error-Based",
+        "title": "SQL Injection â€“ Error-Based",
         "severity": "critical",
         "url": f"{_BASE}/product",
         "parameter": "id",
@@ -152,24 +152,24 @@ EXAMPLE_FINDINGS: list[dict] = [
             "to your MySQL server version for the right syntax to use near '''\n"
             "at line 1\n\n"
             "Signature 'You have an error in your SQL syntax' matched the fuzzed\n"
-            "response but was ABSENT from the baseline — confirmed new signal."
+            "response but was ABSENT from the baseline â€” confirmed new signal."
         ),
         "cwe": "CWE-89",
-        "owasp": "A03:2021 – Injection",
+        "owasp": "A03:2021 â€“ Injection",
         "cvss_score": 9.8,
         "confidence": 0.9,
         "remediation": (
             "Replace all dynamic SQL string concatenation with parameterised queries "
             "or prepared statements. In Python use the DB-API 2 placeholder syntax: "
-            "cursor.execute('SELECT * FROM products WHERE id = %s', (user_id,)) — "
+            "cursor.execute('SELECT * FROM products WHERE id = %s', (user_id,)) â€” "
             "never cursor.execute(f'SELECT * FROM products WHERE id = {user_id}'). "
             "Apply the principle of least privilege: the database account used by the "
-            "application should have SELECT/INSERT/UPDATE rights only — no DROP, ALTER, "
+            "application should have SELECT/INSERT/UPDATE rights only â€” no DROP, ALTER, "
             "FILE, or SUPER privileges. "
             "Enable a Web Application Firewall rule for SQL injection patterns as a "
             "supplementary control, but do not treat it as a substitute for fixing the "
             "root cause in code. "
-            "Audit every query in the codebase — one unparameterised query can expose "
+            "Audit every query in the codebase â€” one unparameterised query can expose "
             "the entire database."
         ),
     },
@@ -179,7 +179,7 @@ EXAMPLE_FINDINGS: list[dict] = [
     # -----------------------------------------------------------------------
     {
         "template_id": "sqli-time",
-        "title": "SQL Injection – Time-Based Blind",
+        "title": "SQL Injection â€“ Time-Based Blind",
         "severity": "high",
         "url": f"{_BASE}/login",
         "parameter": "username",
@@ -190,9 +190,9 @@ EXAMPLE_FINDINGS: list[dict] = [
             "Content-Type: application/x-www-form-urlencoded\n\n"
             "username=admin'+AND+SLEEP(5)--+-&password=x\n\n"
             "HTTP/1.1 200 OK\n"
-            "(Response body identical to baseline — no error message visible)\n\n"
+            "(Response body identical to baseline â€” no error message visible)\n\n"
             "Baseline response time:   148 ms\n"
-            "Fuzzed response time:    5 221 ms  (Δ ≈ 5 073 ms)\n\n"
+            "Fuzzed response time:    5 221 ms  (Î” â‰ˆ 5 073 ms)\n\n"
             "A 5-second artificial delay was induced by the SLEEP(5) payload, "
             "confirming the username parameter is concatenated directly into a SQL "
             "statement executed by a MySQL-compatible database. Because the application "
@@ -200,11 +200,11 @@ EXAMPLE_FINDINGS: list[dict] = [
             "signal, but the vulnerability is equally exploitable."
         ),
         "cwe": "CWE-89",
-        "owasp": "A03:2021 – Injection",
+        "owasp": "A03:2021 â€“ Injection",
         "cvss_score": 7.5,
         "confidence": 0.9,
         "remediation": (
-            "Use parameterised queries for every database interaction — this is the "
+            "Use parameterised queries for every database interaction â€” this is the "
             "only reliable fix for SQL injection regardless of whether error output "
             "is suppressed. "
             "In Python/SQLAlchemy use the ORM or Core expression language rather than "
@@ -242,14 +242,14 @@ EXAMPLE_FINDINGS: list[dict] = [
             "['os'].popen('id').read()}}."
         ),
         "cwe": "CWE-94",
-        "owasp": "A03:2021 – Injection",
+        "owasp": "A03:2021 â€“ Injection",
         "cvss_score": 9.8,
         "confidence": 0.9,
         "remediation": (
             "Never pass user-controlled input directly to a template engine's render "
             "function as template source. Treat template strings as code, not data. "
             "In Jinja2, pass user data as context variables only: "
-            "render_template_string('<h1>Hello, {{ name }}</h1>', name=user_input) — "
+            "render_template_string('<h1>Hello, {{ name }}</h1>', name=user_input) â€” "
             "the template itself must be a developer-controlled string literal, not "
             "derived from the request. "
             "If dynamic template generation is truly required, use a sandboxed "
@@ -287,7 +287,7 @@ EXAMPLE_FINDINGS: list[dict] = [
             "a filesystem path without sanitisation."
         ),
         "cwe": "CWE-22",
-        "owasp": "A01:2021 – Broken Access Control",
+        "owasp": "A01:2021 â€“ Broken Access Control",
         "cvss_score": 7.5,
         "confidence": 0.9,
         "remediation": (
@@ -298,7 +298,7 @@ EXAMPLE_FINDINGS: list[dict] = [
             "Never pass user-supplied filenames directly to open(), send_file(), or "
             "equivalent OS calls. "
             "Maintain an allowlist of permitted filenames or slugs and map them to "
-            "server-side file paths — do not accept arbitrary paths from the client. "
+            "server-side file paths â€” do not accept arbitrary paths from the client. "
             "Run the web-server process under a dedicated low-privilege OS user and "
             "use filesystem permissions (chroot / container isolation) so that even a "
             "successful bypass cannot read files outside the application root."
@@ -328,7 +328,7 @@ EXAMPLE_FINDINGS: list[dict] = [
             "authentication, exploiting user trust in the legitimate domain."
         ),
         "cwe": "CWE-601",
-        "owasp": "A01:2021 – Broken Access Control",
+        "owasp": "A01:2021 â€“ Broken Access Control",
         "cvss_score": 6.1,
         "confidence": 0.9,
         "remediation": (
@@ -341,7 +341,7 @@ EXAMPLE_FINDINGS: list[dict] = [
             "explicit allowlist of permitted domains (e.g. your own subdomains) and "
             "reject anything outside it. "
             "Never trust user-controlled input as the sole source of a redirect target "
-            "without server-side validation — client-side JavaScript checks are "
+            "without server-side validation â€” client-side JavaScript checks are "
             "trivially bypassed."
         ),
     },
@@ -369,7 +369,7 @@ EXAMPLE_FINDINGS: list[dict] = [
             "injected via XSS or malicious third-party resources."
         ),
         "cwe": "CWE-693",
-        "owasp": "A05:2021 – Security Misconfiguration",
+        "owasp": "A05:2021 â€“ Security Misconfiguration",
         "cvss_score": 4.3,
         "confidence": 1.0,
         "remediation": (
@@ -413,7 +413,7 @@ EXAMPLE_FINDINGS: list[dict] = [
             "'Transfer funds' or 'Confirm delete' buttons."
         ),
         "cwe": "CWE-693",
-        "owasp": "A05:2021 – Security Misconfiguration",
+        "owasp": "A05:2021 â€“ Security Misconfiguration",
         "cvss_score": 4.3,
         "confidence": 1.0,
         "remediation": (
@@ -422,7 +422,7 @@ EXAMPLE_FINDINGS: list[dict] = [
             "Use 'SAMEORIGIN' only if the application legitimately embeds its own pages "
             "in iframes (e.g. a dashboard widget system). "
             "The modern alternative is the 'frame-ancestors' CSP directive: "
-            "'Content-Security-Policy: frame-ancestors \\'none\\'' — this takes "
+            "'Content-Security-Policy: frame-ancestors \\'none\\'' â€” this takes "
             "precedence over X-Frame-Options in all modern browsers and offers more "
             "granular control. "
             "Deploy both X-Frame-Options and frame-ancestors during a transition period "
@@ -445,14 +445,14 @@ EXAMPLE_FINDINGS: list[dict] = [
             "Host: demo-target.example\n\n"
             "HTTP/1.1 200 OK\n"
             "Content-Type: text/html; charset=utf-8\n"
-            "(served over HTTPS — no Strict-Transport-Security header present)\n\n"
+            "(served over HTTPS â€” no Strict-Transport-Security header present)\n\n"
             "Without HSTS, a network-level attacker can perform a TLS stripping attack: "
             "the first visit to http://demo-target.example (or any redirect before the "
             "browser has seen an HSTS policy) can be intercepted and downgraded to "
             "plaintext HTTP, exposing session cookies and form data."
         ),
         "cwe": "CWE-319",
-        "owasp": "A05:2021 – Security Misconfiguration",
+        "owasp": "A05:2021 â€“ Security Misconfiguration",
         "cvss_score": 5.9,
         "confidence": 1.0,
         "remediation": (
@@ -495,15 +495,15 @@ EXAMPLE_FINDINGS: list[dict] = [
             "refunds, create charges, and access customer PII."
         ),
         "cwe": "CWE-200",
-        "owasp": "A02:2021 – Cryptographic Failures",
+        "owasp": "A02:2021 â€“ Cryptographic Failures",
         "cvss_score": 7.5,
         "confidence": 0.9,
         "remediation": (
             "Never embed secret keys, private tokens, or credentials in client-side "
-            "JavaScript — they are visible to every user and indexed by search engines "
+            "JavaScript â€” they are visible to every user and indexed by search engines "
             "and browser caches. "
             "Immediately revoke and rotate any exposed keys. For the Stripe key, log "
-            "into the Stripe Dashboard → Developers → API Keys and roll the secret "
+            "into the Stripe Dashboard â†’ Developers â†’ API Keys and roll the secret "
             "immediately; review the event log for unauthorised charges. "
             "Move all secret values to server-side environment variables or a secrets "
             "manager (e.g. AWS Secrets Manager, HashiCorp Vault, GCP Secret Manager) "
@@ -540,7 +540,7 @@ EXAMPLE_FINDINGS: list[dict] = [
             "Token), enabling full access to the AWS account's IAM-permitted resources."
         ),
         "cwe": "CWE-918",
-        "owasp": "A10:2021 – Server-Side Request Forgery",
+        "owasp": "A10:2021 â€“ Server-Side Request Forgery",
         "cvss_score": 8.6,
         "confidence": 0.9,
         "remediation": (
@@ -548,16 +548,16 @@ EXAMPLE_FINDINGS: list[dict] = [
             "external hosts before the server issues any outbound request. "
             "Reject requests to private IP ranges (RFC 1918: 10.0.0.0/8, "
             "172.16.0.0/12, 192.168.0.0/16), loopback (127.0.0.0/8), link-local "
-            "(169.254.0.0/16 — the AWS/GCP/Azure metadata range), and IPv6 equivalents. "
+            "(169.254.0.0/16 â€” the AWS/GCP/Azure metadata range), and IPv6 equivalents. "
             "Resolve the hostname to an IP address *before* making the request and "
-            "re-validate the resolved IP — DNS rebinding can bypass hostname-based "
+            "re-validate the resolved IP â€” DNS rebinding can bypass hostname-based "
             "checks. "
             "If running on AWS EC2 or ECS, enforce IMDSv2 (token-required mode) on "
             "all instances so that the metadata service requires a PUT-based session "
             "token; an SSRF via a simple GET will then return a 401. "
             "Run the application's outbound HTTP client through an egress proxy that "
             "enforces the same allowlist at the network layer as a defence-in-depth "
-            "control — code-level validation alone is insufficient."
+            "control â€” code-level validation alone is insufficient."
         ),
     },
 ]
@@ -572,7 +572,7 @@ def seed() -> str:
     """
     Insert one example ScanRow and all synthetic FindingRows into the database.
 
-    Safe to call multiple times — if a scan with the same target URL already
+    Safe to call multiple times â€” if a scan with the same target URL already
     exists in the DB with ``is_example=True``, the function prints a notice
     and skips insertion to avoid duplicate demo scans.
 
@@ -589,11 +589,18 @@ def seed() -> str:
 
     # Realistic risk score derived from the CVSS/confidence values above.
     # Formula (same as reporter.build_result):
-    #   risk = min(Σ(cvss × confidence × weight) × 10, 100)
+    #   risk = min(Î£(cvss Ã— confidence Ã— weight) Ã— 10, 100)
     # Weights: critical=1.0, high=0.75, medium=0.5, low=0.25, info=0.05
     risk_score = 87.4  # pre-computed for the finding set above
 
     with Session(engine) as session:
+        from sqlmodel import select
+        from app.db.models import ScanRow
+        existing = session.exec(select(ScanRow).where(ScanRow.is_example == True)).first()
+        if existing:
+            print(f"[ProbeX seed] [OK] Example scan already exists scan_id={existing.id} - skipping duplicate creation.")
+            return existing.id
+
         # Create the scan row.
         create_scan(
             session=session,
@@ -629,7 +636,7 @@ def seed() -> str:
     print(f"[ProbeX seed] [OK] Example scan created  scan_id={scan_id}")
     print(f"[ProbeX seed] [OK] {n} synthetic findings inserted across {_count_templates()} template IDs.")
     print(f"[ProbeX seed] [OK] status=done, risk_score={risk_score}, endpoints_found=23")
-    print("[ProbeX seed] [OK] All records carry is_example=True — safe for demo use.")
+    print("[ProbeX seed] [OK] All records carry is_example=True â€” safe for demo use.")
     print()
     print("  Template coverage:")
     for tmpl, titles in _template_summary().items():
@@ -652,3 +659,5 @@ def _count_templates() -> int:
 
 if __name__ == "__main__":
     seed()
+
+
