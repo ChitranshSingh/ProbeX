@@ -1,0 +1,14 @@
+template_id: open-redirect
+title: Open Redirect
+severity: medium
+cwe: CWE-601
+owasp: "A01:2021 – Broken Access Control"
+cvss_score: 6.1
+payloads:
+  - "https://probe.invalid/{nonce}"
+detection:
+  type: redirect_location_exact_match
+  follow_redirects: false
+remediation: >
+  Resolve redirect targets against a server-side allow-list of approved relative
+  paths or domains. Do not redirect directly to user-supplied URLs.

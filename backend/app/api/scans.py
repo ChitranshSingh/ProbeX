@@ -25,11 +25,13 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlmodel import Session
 
 from app.core.runner import start_scan_task
+from app.core.config import settings
+from app.core.guardrails import TargetBlocked, check_scan_rate_limit, resolve_and_check_target
 from app.db import crud
 from app.db.session import get_session
 from app.schemas import Finding, ScanRequest, ScanSummary
@@ -108,6 +110,7 @@ def _build_summary(scan, findings) -> ScanSummary:  # type: ignore[no-untyped-de
 )
 async def create_scan(
     body: ScanRequest,
+    request: Request,
     session: Session = Depends(get_session),
 ) -> dict:
     """
@@ -128,6 +131,18 @@ async def create_scan(
             detail="You must confirm you have permission to scan this target.",
         )
 
+    requester_ip = request.client.host if request.client else "unknown"
+    try:
+        # Local lab mode is explicitly enabled with ALLOW_PRIVATE_TARGETS=true.
+        # Do not make a developer wait after a few localhost iterations; public
+        # deployments retain the per-requester admission limit.
+        if not settings.allow_private_targets:
+            check_scan_rate_limit(requester_ip)
+        await resolve_and_check_target(str(body.target_url))
+    except TargetBlocked as exc:
+        crud.add_audit_log(session, "scan_blocked", str(exc), requester_ip=requester_ip)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     scan_id = str(uuid.uuid4())
     target_str = str(body.target_url)
 
@@ -138,6 +153,7 @@ async def create_scan(
         profile=body.profile,
         consent_confirmed=body.consent_confirmed,
     )
+    crud.add_audit_log(session, "scan_accepted", f"profile={body.profile}", scan_id=scan_id, requester_ip=requester_ip)
 
     # Schedule the pipeline — creates an asyncio.Task in the running loop.
     start_scan_task(scan_id, body)

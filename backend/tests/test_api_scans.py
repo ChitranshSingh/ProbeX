@@ -74,6 +74,13 @@ from app.db.session import get_session  # noqa: E402
 from app.main import app as _fastapi_app  # noqa: E402  — alias avoids clobbering the `app` pkg
 
 # Create tables on the in-memory engine.
+from app.core.config import settings  # noqa: E402
+
+# API endpoint tests intentionally use a loopback fixture. Production defaults
+# remain safe; integration tests opt in to their isolated local target.
+settings.allow_private_targets = True
+settings.scan_rate_limit = 999
+
 SQLModel.metadata.create_all(_test_engine)
 
 # Apply the dependency override.

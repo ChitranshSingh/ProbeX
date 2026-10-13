@@ -18,7 +18,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import Any, Awaitable, Callable
+from urllib.parse import urljoin
 
 import httpx
 
@@ -71,6 +72,8 @@ class HttpClient:
         max_retries: int = _MAX_RETRIES,
         follow_redirects: bool = True,
         verify_ssl: bool = True,
+        url_validator: Callable[[str], Awaitable[Any]] | None = None,
+        requests_per_second: float = 0.0,
     ) -> None:
         """
         Initialise the client.
@@ -90,10 +93,17 @@ class HttpClient:
         """
         self._timeout = timeout
         self._max_retries = max_retries
+        self._follow_redirects = follow_redirects
+        self._url_validator = url_validator
+        self._request_interval = 1 / requests_per_second if requests_per_second > 0 else 0.0
+        self._last_request_at = 0.0
+        self._rate_lock = asyncio.Lock()
         self._client = httpx.AsyncClient(
             headers={"User-Agent": _USER_AGENT},
             timeout=timeout,
-            follow_redirects=follow_redirects,
+            # Redirects are followed below, one hop at a time, so every new
+            # destination can be revalidated against SSRF controls.
+            follow_redirects=False,
             verify=verify_ssl,
         )
 
@@ -157,7 +167,7 @@ class HttpClient:
     # ------------------------------------------------------------------
 
     async def _request_with_retry(
-        self, method: str, url: str, **kwargs: Any
+        self, method: str, url: str, _redirect_count: int = 0, **kwargs: Any
     ) -> httpx.Response:
         """
         Execute an HTTP request, retrying up to ``self._max_retries`` times.
@@ -171,6 +181,8 @@ class HttpClient:
         Back-off schedule: ``_RETRY_BASE_DELAY * 2^attempt`` seconds
         (0.5 s before attempt 1, 1.0 s before attempt 2).
         """
+        follow_redirects = kwargs.pop("follow_redirects", self._follow_redirects)
+        current_url = url
         last_exc: BaseException | None = None
 
         for attempt in range(self._max_retries + 1):
@@ -187,7 +199,14 @@ class HttpClient:
                 await asyncio.sleep(delay)
 
             try:
-                resp = await self._client.request(method, url, **kwargs)
+                if self._url_validator:
+                    await self._url_validator(current_url)
+                async with self._rate_lock:
+                    delay = self._request_interval - (time.monotonic() - self._last_request_at)
+                    if delay > 0:
+                        await asyncio.sleep(delay)
+                    self._last_request_at = time.monotonic()
+                resp = await self._client.request(method, current_url, **kwargs)
                 if resp.status_code in _RETRYABLE_STATUSES:
                     logger.debug(
                         "Retryable status %d from %s %s",
@@ -201,6 +220,13 @@ class HttpClient:
                         response=resp,
                     )
                     continue  # retry
+                if follow_redirects and resp.is_redirect and resp.headers.get("location"):
+                    if _redirect_count >= 5:
+                        raise httpx.TooManyRedirects("Too many redirects", request=resp.request)
+                    current_url = urljoin(str(resp.url), resp.headers["location"])
+                    # A redirect is a new request, not a retry. Start its
+                    # retry budget fresh while preserving the original method.
+                    return await self._request_with_retry(method, current_url, _redirect_count=_redirect_count + 1, **kwargs)
                 return resp
 
             except (httpx.TransportError, httpx.TimeoutException) as exc:

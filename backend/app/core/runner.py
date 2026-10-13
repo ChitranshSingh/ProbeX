@@ -44,9 +44,20 @@ from app.db.session import engine
 from app.schemas import ScanRequest, WSMessage
 from engine.crawler import HttpCrawler
 from engine.detectors.headers import check_headers
+from engine.detectors.extended import (
+    detect_cookie_security,
+    detect_cors_misconfiguration,
+    detect_dangerous_http_methods,
+    detect_debug_disclosure,
+    detect_open_redirect,
+    detect_path_traversal,
+    detect_sensitive_data,
+    detect_ssti,
+)
 from engine.detectors.sqli import detect_sqli_error
 from engine.detectors.xss import detect_xss
 from engine.http_client import HttpClient
+from app.core.guardrails import resolve_and_check_target
 from engine.reporter import build_result
 from ai.remediation import get_ai_remediation
 
@@ -64,6 +75,7 @@ _EVENT_BUFFER: dict[str, list[dict]] = {}
 
 # Terminal statuses — queue is cleaned up after these.
 _TERMINAL_STATUSES = frozenset({"done", "failed", "blocked"})
+_SCAN_SEMAPHORE = asyncio.Semaphore(settings.max_concurrent_scans)
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +239,23 @@ async def run_scan(scan_id: str, request: ScanRequest) -> None:
     all_findings: list[Any] = []
 
     try:
+        async with _SCAN_SEMAPHORE:
+            await _run_scan_locked(scan_id, request, target_url, t_start, all_findings)
+    except Exception as exc:
+        logger.exception("Scan %s failed with unhandled exception", scan_id)
+        _db_update_status(scan_id, "failed")
+        broadcast(scan_id, _status_msg("failed"))
+        broadcast(scan_id, {"type": "error", "data": {"message": str(exc)}})
+    finally:
+        # Remove the live queue; the event buffer stays for late WS connects.
+        RUNNING_SCANS.pop(scan_id, None)
+
+
+async def _run_scan_locked(
+    scan_id: str, request: ScanRequest, target_url: str, t_start: float, all_findings: list[Any]
+) -> None:
+    """Run the scan after a bounded worker slot has been acquired."""
+    try:
         # ------------------------------------------------------------------
         # Stage 1: crawling
         # ------------------------------------------------------------------
@@ -237,7 +266,7 @@ async def run_scan(scan_id: str, request: ScanRequest) -> None:
         max_depth = 2 if request.profile == "standard" else 1
         max_urls = 200 if request.profile == "standard" else 50
 
-        async with HttpClient() as client:
+        async with HttpClient(url_validator=resolve_and_check_target, requests_per_second=settings.max_requests_per_second) as client:
             crawler = HttpCrawler(client)
             try:
                 endpoints = await crawler.crawl(
@@ -264,7 +293,8 @@ async def run_scan(scan_id: str, request: ScanRequest) -> None:
         from urllib.parse import urlparse as _urlparse
         checked_header_origins: set[str] = set()
 
-        async with HttpClient() as client:
+        seen_finding_keys: set[tuple[str, str, str | None]] = set()
+        async with HttpClient(url_validator=resolve_and_check_target, requests_per_second=settings.max_requests_per_second) as client:
             for idx, ep in enumerate(endpoints):
                 pct = 25.0 + (idx / max(n_endpoints, 1)) * 50.0
                 broadcast(scan_id, _progress_msg(pct, "fuzzing"))
@@ -291,6 +321,20 @@ async def run_scan(scan_id: str, request: ScanRequest) -> None:
                 except Exception as exc:
                     logger.warning("SQLi detector error on %s: %s", ep.url, exc)
 
+                # Additional confirmation-based active checks. They run only
+                # against relevant parameter classes discovered by the crawler.
+                for detector in (detect_open_redirect, detect_path_traversal, detect_ssti):
+                    try:
+                        finding = await detector(client, ep)
+                        key = (finding.template_id, finding.url, finding.parameter) if finding else None
+                        if finding and key not in seen_finding_keys:
+                            seen_finding_keys.add(key)
+                            _db_add_finding(scan_id, finding)
+                            broadcast(scan_id, _finding_msg(_finding_to_dict(finding)))
+                            all_findings.append(finding)
+                    except Exception as exc:
+                        logger.warning("%s detector error on %s: %s", detector.__name__, ep.url, exc)
+
                 # Headers detector — once per unique origin (scheme+host) only.
                 # Checking every endpoint would produce N×3 duplicate header findings.
                 try:
@@ -304,8 +348,35 @@ async def run_scan(scan_id: str, request: ScanRequest) -> None:
                             broadcast(scan_id, _finding_msg(_finding_to_dict(hf)))
                             all_findings.append(hf)
                             logger.info("Header finding '%s' at %s", hf.title, origin)
+
+                        passive_findings = [
+                            *await detect_cookie_security(client, ep.url),
+                            *await detect_debug_disclosure(client, ep.url),
+                        ]
+                        cors_finding = await detect_cors_misconfiguration(client, ep.url)
+                        trace_finding = await detect_dangerous_http_methods(client, ep.url)
+                        passive_findings.extend(finding for finding in (cors_finding, trace_finding) if finding)
+                        for finding in passive_findings:
+                            key = (finding.template_id, finding.url, finding.title)
+                            if key in seen_finding_keys:
+                                continue
+                            seen_finding_keys.add(key)
+                            _db_add_finding(scan_id, finding)
+                            broadcast(scan_id, _finding_msg(_finding_to_dict(finding)))
+                            all_findings.append(finding)
                 except Exception as exc:
                     logger.warning("Headers detector error on %s: %s", ep.url, exc)
+
+                try:
+                    for finding in await detect_sensitive_data(client, ep.url):
+                        key = (finding.template_id, finding.url, finding.title)
+                        if key not in seen_finding_keys:
+                            seen_finding_keys.add(key)
+                            _db_add_finding(scan_id, finding)
+                            broadcast(scan_id, _finding_msg(_finding_to_dict(finding)))
+                            all_findings.append(finding)
+                except Exception as exc:
+                    logger.warning("Sensitive-data detector error on %s: %s", ep.url, exc)
 
         broadcast(scan_id, _progress_msg(75.0, "fuzzing"))
         broadcast(
@@ -392,12 +463,6 @@ async def run_scan(scan_id: str, request: ScanRequest) -> None:
             elapsed,
         )
 
-    except Exception as exc:
-        logger.exception("Scan %s failed with unhandled exception", scan_id)
-        _db_update_status(scan_id, "failed")
-        broadcast(scan_id, _status_msg("failed"))
-        broadcast(scan_id, {"type": "error", "data": {"message": str(exc)}})
-
-    finally:
-        # Remove the live queue; the event buffer stays for late WS connects.
-        RUNNING_SCANS.pop(scan_id, None)
+    except Exception:
+        # The caller owns the terminal-state transition and WebSocket error.
+        raise

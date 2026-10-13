@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Optional
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from engine.confidence import MINIMUM_CONFIDENCE, is_match, score
 from engine.http_client import HttpClient
@@ -52,6 +53,8 @@ ERROR_SIGNATURES: list[str] = [
     # SQLite
     r"SQLite3::query\(\)",
     r"sqlite3\.OperationalError",
+    r"near\s+['\"].*['\"]:\s*syntax error",
+    r"unrecognized token:",
     # Generic PHP database helpers
     r"Warning:\s+mysql_",
     r"Warning:\s+mysqli_",
@@ -82,6 +85,12 @@ _REMEDIATION = (
     "Apply the principle of least privilege — the DB account should not have "
     "DROP / ALTER / FILE permissions."
 )
+
+
+def _replace_query_value(url: str, parameter: str, value: str) -> str:
+    parsed = urlparse(url)
+    query = [(key, value if key == parameter else current) for key, current in parse_qsl(parsed.query, keep_blank_values=True)]
+    return urlunparse(parsed._replace(query=urlencode(query)))
 
 
 # ---------------------------------------------------------------------------
@@ -155,11 +164,10 @@ async def detect_sqli_error(
         form_data[field.name] = _PAYLOAD
 
         try:
-            fuzzed_resp = await client.request(
-                endpoint.method,
-                endpoint.url,
-                data=form_data,
-            )
+            if endpoint.method == "GET":
+                fuzzed_resp = await client.get(endpoint.url, params=form_data)
+            else:
+                fuzzed_resp = await client.request(endpoint.method, endpoint.url, data=form_data)
         except Exception:
             continue
 
@@ -190,10 +198,7 @@ async def detect_sqli_error(
     # --- Probe URL query parameters ---
     for param in target_params:
         try:
-            fuzzed_resp = await client.get(
-                endpoint.url,
-                params={param: _PAYLOAD},
-            )
+            fuzzed_resp = await client.get(_replace_query_value(endpoint.url, param, _PAYLOAD))
         except Exception:
             continue
 

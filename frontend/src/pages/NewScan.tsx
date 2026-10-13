@@ -2,10 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Globe, Zap, Target, AlertTriangle, ChevronRight,
-  Clock, Shield, Check, Cpu, Lock, Terminal, ShieldAlert, FileCode, Layers, RefreshCw
+  Shield, Check, Cpu, Lock, Terminal, ShieldAlert, FileCode, Layers, RefreshCw
 } from 'lucide-react';
 import { createScan } from '../api/client';
-import { useTheme } from '../context/ThemeContext';
 
 type Profile = 'quick' | 'standard';
 
@@ -43,17 +42,19 @@ const PROFILES: {
 
 const DETECTORS = [
   { label: 'Reflected Cross-Site Scripting (XSS)', icon: Zap, color: 'text-amber-500', tag: 'High' },
-  { label: 'SQL Injection (Error & Time-blind)', icon: ShieldAlert, color: 'text-rose-500', tag: 'Critical' },
+  { label: 'SQL Injection (Error-based)', icon: ShieldAlert, color: 'text-rose-500', tag: 'High' },
   { label: 'Security Headers Audit (CSP, HSTS)', icon: Shield, color: 'text-emerald-500', tag: 'Low' },
   { label: 'Open Redirect & URL Parameter Fuzzing', icon: RefreshCw, color: 'text-cyan-500', tag: 'Medium' },
   { label: 'Path Traversal & File Inclusion', icon: FileCode, color: 'text-indigo-500', tag: 'High' },
   { label: 'Server-Side Template Injection (SSTI)', icon: Cpu, color: 'text-purple-500', tag: 'Critical' },
-  { label: 'Server-Side Request Forgery (SSRF)', icon: Layers, color: 'text-blue-500', tag: 'High' },
+  { label: 'Sensitive Data Exposure (Passive)', icon: Layers, color: 'text-blue-500', tag: 'High' },
+  { label: 'Cookie Security Flags', icon: Lock, color: 'text-orange-500', tag: 'Medium' },
+  { label: 'Credentialed CORS Reflection', icon: Globe, color: 'text-cyan-500', tag: 'High' },
+  { label: 'Debug / Directory Disclosure', icon: Terminal, color: 'text-rose-500', tag: 'Medium' },
 ];
 
 export default function NewScan() {
   const navigate = useNavigate();
-  const { theme } = useTheme();
   const [url, setUrl]         = useState('');
   const [profile, setProfile] = useState<Profile>('quick');
   const [consent, setConsent] = useState(false);
@@ -85,7 +86,7 @@ export default function NewScan() {
     }
   }
 
-  const QUICK_URLS = ['http://localhost:5500', 'http://localhost:3000', 'http://localhost:8080'];
+  const QUICK_URLS = ['https://demo.owasp-juice.shop', 'http://localhost:5500', 'http://localhost:3000'];
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-deep)' }}>
@@ -144,6 +145,10 @@ export default function NewScan() {
                     <AlertTriangle size={13} /> {urlErr}
                   </p>
                 )}
+
+                <p className="mt-2 text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                  Public HTTPS practice target: OWASP Juice Shop. Local/private targets require an explicit backend lab setting and are blocked by default.
+                </p>
 
                 {/* Quick-fill pills */}
                 <div className="flex items-center gap-2 mt-3 flex-wrap">
@@ -301,7 +306,7 @@ export default function NewScan() {
                 </p>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded"
                   style={{ background: 'var(--bg-subtle)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-                  7 Enabled
+                  10 Enabled
                 </span>
               </div>
               <div className="space-y-2">

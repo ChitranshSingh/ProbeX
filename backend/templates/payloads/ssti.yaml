@@ -1,0 +1,15 @@
+template_id: ssti-math-probe
+title: Server-Side Template Injection
+severity: high
+cwe: CWE-1336
+owasp: "A03:2021 – Injection"
+cvss_score: 8.2
+payloads:
+  - "{{7*7}}"
+  - "{{8*8}}"
+detection:
+  type: double_math_probe
+  expected_values: ["49", "64"]
+remediation: >
+  Keep template source server-controlled. Pass user values only as data to a
+  template engine; never compile or evaluate user-controlled template text.

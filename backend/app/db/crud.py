@@ -17,7 +17,7 @@ from typing import Optional
 
 from sqlmodel import Session, select
 
-from app.db.models import FindingRow, ScanRow
+from app.db.models import AuditLogRow, FindingRow, ScanRow
 from app.schemas import Finding
 
 
@@ -221,6 +221,15 @@ def clear_scan_history(session: Session, keep_examples: bool = True) -> int:
         session.delete(scan)
     session.commit()
     return len(scans)
+
+
+def add_audit_log(
+    session: Session, action: str, detail: str, *, scan_id: str | None = None, requester_ip: str | None = None
+) -> AuditLogRow:
+    record = AuditLogRow(scan_id=scan_id, action=action, detail=detail[:1000], requester_ip=requester_ip)
+    session.add(record)
+    session.commit()
+    return record
 
 
 def delete_scan(session: Session, scan_id: str) -> bool:

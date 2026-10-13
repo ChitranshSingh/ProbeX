@@ -22,6 +22,7 @@ import random
 import string
 import uuid
 from typing import Optional
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from bs4 import BeautifulSoup, Comment
 
@@ -124,6 +125,12 @@ def _make_nonce() -> str:
     return "px_" + "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
 
 
+def _replace_query_value(url: str, parameter: str, value: str) -> str:
+    parsed = urlparse(url)
+    query = [(key, value if key == parameter else current) for key, current in parse_qsl(parsed.query, keep_blank_values=True)]
+    return urlunparse(parsed._replace(query=urlencode(query)))
+
+
 # ---------------------------------------------------------------------------
 # Async detector
 # ---------------------------------------------------------------------------
@@ -173,11 +180,12 @@ async def detect_xss(
     # --- Probe form fields ---
     for field in target_fields:
         try:
-            fuzzed_resp = await client.request(
-                endpoint.method,
-                endpoint.url,
-                data={field.name: payload},
-            )
+            form_data = {ff.name: ff.default_value for ff in endpoint.form_fields}
+            form_data[field.name] = payload
+            if endpoint.method == "GET":
+                fuzzed_resp = await client.get(endpoint.url, params=form_data)
+            else:
+                fuzzed_resp = await client.request(endpoint.method, endpoint.url, data=form_data)
         except Exception:
             continue
 
@@ -215,10 +223,7 @@ async def detect_xss(
     # --- Probe URL query parameters (GET endpoints) ---
     for param in endpoint.params:
         try:
-            fuzzed_resp = await client.get(
-                endpoint.url,
-                params={param: payload},
-            )
+            fuzzed_resp = await client.get(_replace_query_value(endpoint.url, param, payload))
         except Exception:
             continue
 

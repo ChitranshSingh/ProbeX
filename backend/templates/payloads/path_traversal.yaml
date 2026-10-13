@@ -1,0 +1,15 @@
+template_id: path-traversal
+title: Path Traversal / Local File Inclusion
+severity: high
+cwe: CWE-22
+owasp: "A01:2021 – Broken Access Control"
+cvss_score: 8.1
+payloads:
+  - "../../../../etc/passwd"
+  - "..%2f..%2f..%2f..%2fetc%2fpasswd"
+detection:
+  type: baseline_differential_regex
+  pattern: "root:x:0:0:"
+remediation: >
+  Resolve user-supplied file identifiers against a fixed base directory and
+  reject paths that escape it after canonicalisation.

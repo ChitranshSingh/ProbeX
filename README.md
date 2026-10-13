@@ -1,8 +1,6 @@
 # ProbeX
 
-> **This is a scoped-down solo prototype ahead of a full 4-person team build.
-> See the [full build plan](docs/01-ProbeX-Build-Prompts.md) for the complete
-> architecture and multi-sprint roadmap.**
+> **Live-scanning build.** Demo scans remain available alongside the guarded backend scanner.
 
 ProbeX is a browser-based **Dynamic Application Security Testing (DAST)** scanner
 that runs entirely on localhost with zero external services besides an optional
@@ -125,6 +123,44 @@ The **confidence module** is the core false-positive defence: a pattern match
 only counts if it was *not already present* in the baseline response (e.g. a
 page whose footer already contains the word "error" is never wrongly flagged as
 SQL Injection).
+
+## Live scanning and safety controls
+
+ProbeX tests public HTTP(S) targets where you have explicit permission. The server
+enforces consent, resolves each target hostname, rejects private/loopback/reserved
+addresses by default, and repeats that validation for every redirect. Scan creation
+is rate-limited, outbound requests are paced, worker concurrency is bounded, and
+every admission decision is persisted in an audit log.
+
+Use the OWASP Juice Shop preset for a public, deliberately vulnerable HTTPS practice
+target. The HTTP crawler tests server-rendered forms and parameterised routes. Full
+JavaScript browser interaction remains a clearly stated next step, not a claimed feature.
+
+Live checks include reflected XSS, error-based SQL injection, open redirects, path
+traversal/LFI, template math probes, missing security headers, and passive exposed-secret
+indicators. Active probes are restricted to matching input types and require a new response
+signal relative to a recorded baseline.
+
+### Deployed-site configuration
+
+ProbeX scans public HTTP(S) applications from its backend, not from the browser, so
+it is not constrained by target-site CORS. For a deployed instance, keep
+`ALLOW_PRIVATE_TARGETS=false`, set `FRONTEND_ORIGIN` to the HTTPS dashboard URL,
+use a persistent production database, and configure conservative values for
+`MAX_CONCURRENT_SCANS` and `MAX_REQUESTS_PER_SECOND`. The scanner validates the
+resolved IP address of the initial URL and every redirect destination before it
+makes a request; this prevents the application being used as an internal-network
+proxy.
+
+Current live coverage also includes credentialed CORS origin reflection, weak
+session-cookie flags, server debug/stack-trace disclosure, directory listings,
+and exposed TRACE. These checks are passive or use low-impact `OPTIONS`/`Origin`
+requests, which makes them suitable for authorised production assessments.
+
+The public deployment limiter allows `SCAN_RATE_LIMIT` scans per requester per
+`SCAN_RATE_WINDOW_SECONDS` (defaults: 3 per 10 minutes). When the explicitly
+local-only `ALLOW_PRIVATE_TARGETS=true` mode is used, that creation limiter is
+skipped so repeated testing of the included lab does not interrupt development.
 
 ---
 

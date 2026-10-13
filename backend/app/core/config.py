@@ -29,5 +29,13 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:5173"
     """Origin allowed through CORS middleware (Vite dev server by default)."""
 
+    allow_private_targets: bool = False
+    """Allow RFC1918/loopback targets. Keep false for every shared deployment."""
+
+    max_concurrent_scans: int = 2
+    max_requests_per_second: float = 3.0
+    scan_rate_limit: int = 3
+    scan_rate_window_seconds: int = 600
+
 
 settings = Settings()

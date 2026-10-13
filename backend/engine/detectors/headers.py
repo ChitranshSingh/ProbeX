@@ -140,7 +140,7 @@ async def check_headers(
                     cwe=cwe,
                     owasp=_OWASP_A05,
                     cvss_score=cvss,
-                    confidence=0.97,  # header absence is deterministic but policy-dependent
+                    confidence=1.0,
                     remediation=remediation,
                 )
             )

@@ -198,3 +198,16 @@ class FindingRow(SQLModel, table=True):
 
 Scan = ScanRow
 FindingRecord = FindingRow
+
+
+class AuditLogRow(SQLModel, table=True):
+    """Durable record of every accepted or rejected scan request."""
+
+    __tablename__ = "audit_logs"
+
+    id: str = Field(default_factory=_new_uuid, primary_key=True)
+    scan_id: Optional[str] = Field(default=None, index=True)
+    action: str
+    detail: str
+    requester_ip: Optional[str] = Field(default=None)
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
